@@ -53,6 +53,31 @@ ${styleSummary || "（无范文，按上面的去 AI 味原则即可）"}
 ${list}`;
 }
 
+/** 标题改写规则：概括全文 + 抓住注意力 */
+export const TITLE_RULES = `这是文章标题，要求和正文完全不同：
+1. 用一句话概括全文核心，第一眼就能抓住读者注意力。
+2. 必须基于文章真实内容，点出最具体、最有信息量或最有反差的那个点；不要泛泛而谈，也不要夸大或与正文不符的标题党。
+3. 简洁有力：多用具体名词、数字，以及"首次/刚刚/解决/来了/史上"等带张力的词；可用"事件：判断"的冒号结构或感叹收尾。
+4. 不堆形容词、不喊空口号。只输出标题文字本身，不要书名号或引号包裹。`;
+
+/** 标题改写：基于全文生成多个标题候选 */
+export function rewriteTitlePrompt(styleSummary: string, fullText: string, n: number): string {
+  return `${ANTI_AI_RULES}
+
+要模仿的风格：
+${styleSummary || "（按下面的标题规则即可）"}
+
+${TITLE_RULES}
+
+下面是整篇文章。请基于全文，拟 ${n} 个不同的标题（角度或句式可以不同）。
+严格只输出 JSON 字符串数组，如 ["标题一","标题二"]，不要任何额外文字、不要 markdown 代码块。
+
+全文：
+"""
+${fullText}
+"""`;
+}
+
 /** 单句生成多个候选表达 */
 export function alternativesPrompt(
   styleSummary: string,

@@ -3,6 +3,7 @@ import {
   styleProfilePrompt,
   rewriteDocPrompt,
   alternativesPrompt,
+  rewriteTitlePrompt,
 } from "../prompts.js";
 
 /** 容错解析模型返回的 JSON（去掉可能的 ```json 包裹） */
@@ -27,16 +28,51 @@ export interface RewriteResult {
   text: string;
 }
 
-/** 整篇按段改写。分块发送以控制单次长度。 */
+/** 整篇拼成纯文本（用于标题概括全文） */
+export function fullText(paragraphs: { text: string }[]): string {
+  return paragraphs.map((p) => p.text).filter((t) => t.trim()).join("\n");
+}
+
+/** 文档标题 = 第一个非空段落的序号；无则 -1 */
+export function titleIndexOf(paragraphs: { index: number; text: string }[]): number {
+  const first = paragraphs.find((p) => p.text.trim().length > 0);
+  return first ? first.index : -1;
+}
+
+/** 基于全文生成多个标题候选 */
+export async function generateTitles(
+  styleSummary: string,
+  text: string,
+  n = 3
+): Promise<string[]> {
+  const raw = await chat(rewriteTitlePrompt(styleSummary, text, n), { temperature: 0.85 });
+  try {
+    const arr = parseJson<string[]>(raw);
+    return arr.filter((x) => typeof x === "string" && x.trim()).map((x) => x.trim()).slice(0, n);
+  } catch {
+    return [];
+  }
+}
+
+/** 整篇按段改写。分块发送以控制单次长度；标题单独按"概括全文+抓注意力"改写。 */
 export async function rewriteDocument(
   styleSummary: string,
   paragraphs: { index: number; kind: string; text: string }[],
   chunkSize = 12
 ): Promise<Map<number, string>> {
   const result = new Map<number, string>();
-  const todo = paragraphs.filter((p) => p.text.trim().length > 0);
+  const nonEmpty = paragraphs.filter((p) => p.text.trim().length > 0);
+  const titleIndex = titleIndexOf(paragraphs);
 
-  // 分块
+  // 标题：独立逻辑，读全文概括起标题（取第一个候选）
+  if (titleIndex >= 0) {
+    const titles = await generateTitles(styleSummary, fullText(paragraphs), 1);
+    const original = nonEmpty.find((p) => p.index === titleIndex)!.text;
+    result.set(titleIndex, titles[0] ?? original);
+  }
+
+  // 正文：排除标题后分块
+  const todo = nonEmpty.filter((p) => p.index !== titleIndex);
   const chunks: typeof todo[] = [];
   for (let i = 0; i < todo.length; i += chunkSize) chunks.push(todo.slice(i, i + chunkSize));
 

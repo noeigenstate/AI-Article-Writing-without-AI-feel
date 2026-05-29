@@ -52,7 +52,8 @@ function styleToKind(style: string): ParaKind {
 function paragraphText(block: string): string {
   let text = "";
   for (const m of block.matchAll(WT_RE)) text += decodeXml(m[1]);
-  return text;
+  // 防御：某些带修订/复杂 run 的 docx 会把 Word 标签残渣漏进文字，剔除之
+  return text.replace(/<\/?w:[^>]*>/g, "");
 }
 
 /** 解析 docx buffer → 段落结构 */

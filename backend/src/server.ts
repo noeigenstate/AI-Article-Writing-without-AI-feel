@@ -9,8 +9,12 @@ import {
   extractStyleProfile,
   rewriteDocument,
   generateAlternatives,
+  generateTitles,
+  titleIndexOf,
+  fullText,
 } from "./services/rewrite.js";
 import { saveDoc, getDoc } from "./store.js";
+import { BUILTIN_STYLES, getBuiltinStyle } from "./styles.js";
 
 const app = express();
 app.use(cors());
@@ -21,6 +25,11 @@ const upload = multer({ storage: multer.memoryStorage() });
 /** 健康检查：模型连通性 */
 app.get("/api/health", async (_req, res) => {
   res.json(await health());
+});
+
+/** 内置风格列表（蒸馏自作者作品的 skill） */
+app.get("/api/styles", (_req, res) => {
+  res.json({ styles: BUILTIN_STYLES.map(({ id, name, desc }) => ({ id, name, desc })) });
 });
 
 /**
@@ -41,7 +50,10 @@ app.post(
 
       const parsed = await parseDocx(target.buffer);
 
-      // 范文 → 文本
+      // 风格来源：内置 skill（styleId）+/或 上传范文
+      const styleId = (req.body?.styleId as string) || "";
+      const builtin = styleId ? getBuiltinStyle(styleId) : undefined;
+
       let sampleText = "";
       for (const f of files?.references ?? []) {
         if (f.originalname.toLowerCase().endsWith(".docx")) {
@@ -51,13 +63,20 @@ app.post(
           sampleText += f.buffer.toString("utf8") + "\n\n";
         }
       }
-      const styleSummary = await extractStyleProfile(sampleText).catch(() => "");
+      const extracted = sampleText.trim()
+        ? await extractStyleProfile(sampleText).catch(() => "")
+        : "";
+
+      const styleSummary = [builtin?.profile, extracted && `补充范文风格：\n${extracted}`]
+        .filter(Boolean)
+        .join("\n\n");
 
       const rec = saveDoc({ buf: target.buffer, paragraphs: parsed.paragraphs, styleSummary });
 
       res.json({
         docId: rec.id,
         styleSummary,
+        titleIndex: titleIndexOf(parsed.paragraphs),
         paragraphs: parsed.paragraphs.map((p) => ({
           index: p.index,
           kind: p.kind,
@@ -95,6 +114,19 @@ app.post("/api/rewrite", async (req, res) => {
         };
       }),
     });
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+/** 标题候选：基于全文生成 N 个标题 */
+app.post("/api/title", async (req, res) => {
+  try {
+    const { docId, n } = req.body as { docId: string; n?: number };
+    const rec = getDoc(docId);
+    if (!rec) return res.status(404).json({ error: "文档不存在或已过期" });
+    const titles = await generateTitles(rec.styleSummary, fullText(rec.paragraphs), n ?? 3);
+    res.json({ titles });
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });
   }

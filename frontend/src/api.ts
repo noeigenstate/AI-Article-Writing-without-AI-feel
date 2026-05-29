@@ -8,15 +8,29 @@ export interface ParagraphDTO {
 
 const BASE = "/api";
 
-export async function uploadFiles(target: File, references: File[]) {
+export interface StyleDTO {
+  id: string;
+  name: string;
+  desc: string;
+}
+
+export async function fetchStyles() {
+  const res = await fetch(`${BASE}/styles`);
+  if (!res.ok) return [] as StyleDTO[];
+  return (await res.json()).styles as StyleDTO[];
+}
+
+export async function uploadFiles(target: File, references: File[], styleId = "") {
   const fd = new FormData();
   fd.append("file", target);
   references.forEach((r) => fd.append("references", r));
+  if (styleId) fd.append("styleId", styleId);
   const res = await fetch(`${BASE}/upload`, { method: "POST", body: fd });
   if (!res.ok) throw new Error((await res.json()).error ?? "上传失败");
   return res.json() as Promise<{
     docId: string;
     styleSummary: string;
+    titleIndex: number;
     paragraphs: ParagraphDTO[];
   }>;
 }
@@ -29,6 +43,16 @@ export async function rewriteDoc(docId: string) {
   });
   if (!res.ok) throw new Error((await res.json()).error ?? "改写失败");
   return res.json() as Promise<{ paragraphs: ParagraphDTO[] }>;
+}
+
+export async function fetchTitles(docId: string, n = 3) {
+  const res = await fetch(`${BASE}/title`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ docId, n }),
+  });
+  if (!res.ok) throw new Error((await res.json()).error ?? "生成标题失败");
+  return (await res.json()).titles as string[];
 }
 
 export async function fetchAlternatives(

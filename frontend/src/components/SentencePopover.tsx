@@ -1,57 +1,49 @@
 import { useEffect, useState } from "react";
-import { fetchAlternatives } from "../api.js";
-import { useStore } from "../store.js";
 
 interface Props {
-  paraIndex: number;
-  sentenceIdx: number;
-  sentence: string;
-  context: string;
+  heading: string;
+  original: string;
+  /** 加载候选（句子候选或标题候选） */
+  loadCandidates: () => Promise<string[]>;
+  onAdopt: (text: string) => void;
   onClose: () => void;
 }
 
-export default function SentencePopover({
-  paraIndex,
-  sentenceIdx,
-  sentence,
-  context,
+export default function RewritePopover({
+  heading,
+  original,
+  loadCandidates,
+  onAdopt,
   onClose,
 }: Props) {
-  const docId = useStore((s) => s.docId)!;
-  const setSentence = useStore((s) => s.setSentence);
-
   const [loading, setLoading] = useState(true);
   const [alts, setAlts] = useState<string[]>([]);
-  const [edit, setEdit] = useState(sentence);
+  const [edit, setEdit] = useState(original);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
-    fetchAlternatives(docId, context, sentence, 3)
+    loadCandidates()
       .then((a) => alive && setAlts(a))
       .catch((e) => alive && setErr(e.message))
       .finally(() => alive && setLoading(false));
     return () => {
       alive = false;
     };
-  }, [docId, context, sentence]);
-
-  const adopt = (text: string) => {
-    setSentence(paraIndex, sentenceIdx, text);
-    onClose();
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="overlay" onClick={onClose}>
       <div className="popover" onClick={(e) => e.stopPropagation()}>
         <div className="popover-head">
-          <span>换个说法</span>
+          <span>{heading}</span>
           <button className="link" onClick={onClose}>
             关闭
           </button>
         </div>
 
-        <div className="orig">原句：{sentence}</div>
+        <div className="orig">原文：{original}</div>
 
         <div className="alts">
           {loading && <div className="hint">生成候选中…</div>}
@@ -59,7 +51,7 @@ export default function SentencePopover({
           {!loading &&
             !err &&
             alts.map((a, i) => (
-              <button key={i} className="alt" onClick={() => adopt(a)}>
+              <button key={i} className="alt" onClick={() => onAdopt(a)}>
                 {a}
               </button>
             ))}
@@ -72,7 +64,7 @@ export default function SentencePopover({
           <label>手动编辑：</label>
           <textarea value={edit} onChange={(e) => setEdit(e.target.value)} rows={3} />
           <div className="row-end">
-            <button className="primary" onClick={() => adopt(edit)}>
+            <button className="primary" onClick={() => onAdopt(edit)}>
               采用这段
             </button>
           </div>
