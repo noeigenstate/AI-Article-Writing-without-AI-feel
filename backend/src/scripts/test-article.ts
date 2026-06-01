@@ -96,7 +96,7 @@ assert.equal(topicRepairCalls, 2);
 assert.equal(repairedTopics.length, 1);
 assert.equal(repairedTopics[0].title, "修复后的选题");
 
-const matchedDomain = await matchArticleDomainFromTitle("孩子用 AI 写作业，学校到底该怎么管", async (prompt) => {
+const matchedDomain = await matchArticleDomainFromTitle("孩子用 AI 写作业，学校到底该怎么管", "zh", async (prompt) => {
   assert.ok(prompt.includes("孩子用 AI 写作业"));
   return JSON.stringify({
     domainId: "education",

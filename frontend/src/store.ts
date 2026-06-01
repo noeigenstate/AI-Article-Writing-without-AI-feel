@@ -15,8 +15,10 @@ import {
   type TargetLength,
   type TopicOptionDTO,
 } from "./api.js";
+import { getStoredLang, storeLang, messages, type Lang } from "./i18n.js";
 
 interface State {
+  lang: Lang;
   docId: string | null;
   styleSummary: string;
   paragraphs: ParagraphDTO[];
@@ -30,6 +32,7 @@ interface State {
   articleDomains: ArticleDomainDTO[];
   research: ResearchBundleDTO | null;
 
+  setLang: (lang: Lang) => void;
   setMode: (mode: "rewrite" | "generate") => void;
   setResearch: (research: ResearchBundleDTO | null) => void;
   loadStyles: () => Promise<void>;
@@ -51,6 +54,7 @@ interface State {
 }
 
 export const useStore = create<State>((set, get) => ({
+  lang: getStoredLang(),
   docId: null,
   styleSummary: "",
   paragraphs: [],
@@ -64,6 +68,14 @@ export const useStore = create<State>((set, get) => ({
   articleDomains: [],
   research: null,
 
+  setLang(lang) {
+    storeLang(lang);
+    set({ lang });
+    // 语言切换后重新拉取本地化的风格/领域列表
+    void get().loadStyles();
+    void get().loadArticleDomains();
+  },
+
   setMode(mode) {
     set({ mode, error: null });
   },
@@ -73,17 +85,17 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async loadStyles() {
-    set({ styles: await fetchStyles() });
+    set({ styles: await fetchStyles(get().lang) });
   },
 
   async loadArticleDomains() {
-    set({ articleDomains: await fetchArticleDomains() });
+    set({ articleDomains: await fetchArticleDomains(get().lang) });
   },
 
   async doUpload(target, refs, styleId) {
-    set({ busy: "解析文档、提取风格中…", error: null });
+    set({ busy: messages[get().lang].busyParsing, error: null });
     try {
-      const r = await uploadFiles(target, refs, styleId);
+      const r = await uploadFiles(target, refs, styleId, get().lang);
       set({
         docId: r.docId,
         styleSummary: r.styleSummary,
@@ -100,9 +112,9 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async doGenerateArticle(domainId, customDomain, topic, styleId, targetLength) {
-    set({ busy: "正在生成公众号文章…", error: null });
+    set({ busy: messages[get().lang].busyGenerating, error: null });
     try {
-      const r = await generateArticle(domainId, customDomain, topic, styleId, targetLength);
+      const r = await generateArticle(domainId, customDomain, topic, styleId, targetLength, get().lang);
       set({
         docId: r.docId,
         styleSummary: r.styleSummary,
@@ -119,9 +131,9 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async doGenerateArticleFromTitle(title, styleId, targetLength) {
-    set({ busy: "正在判断领域并生成公众号文章…", error: null });
+    set({ busy: messages[get().lang].busyMatching, error: null });
     try {
-      const r = await generateArticleFromTitle(title, styleId, targetLength);
+      const r = await generateArticleFromTitle(title, styleId, targetLength, get().lang);
       set({
         docId: r.docId,
         styleSummary: r.styleSummary,
@@ -140,9 +152,9 @@ export const useStore = create<State>((set, get) => ({
   async doRewrite() {
     const { docId } = get();
     if (!docId) return;
-    set({ busy: "整篇改写中（去 AI 味），稍候…", error: null });
+    set({ busy: messages[get().lang].busyRewriting, error: null });
     try {
-      const r = await rewriteDoc(docId);
+      const r = await rewriteDoc(docId, get().lang);
       set({ paragraphs: r.paragraphs, renderBlocks: null, busy: null });
     } catch (e) {
       set({ error: (e as Error).message, busy: null });
@@ -170,7 +182,7 @@ export const useStore = create<State>((set, get) => ({
   async doExport() {
     const { docId, paragraphs } = get();
     if (!docId) return;
-    set({ busy: "生成 Word 中…", error: null });
+    set({ busy: messages[get().lang].busyExporting, error: null });
     try {
       // 只发回真正改动过的段落；未改动的段落不传，导出时原样保留（含段内字符级格式）
       const texts: Record<number, string> = {};

@@ -2,6 +2,13 @@ import { chat, type ChatOptions } from "./llm.js";
 import type { DocxBlock, ParaKind } from "./docx.js";
 import type { ResearchItem } from "./research/types.js";
 import { articleDraftPrompt, articleTopicsPrompt } from "../prompts.js";
+import {
+  ARTICLE_LABELS,
+  CHAIN_NODE_LABELS,
+  EVIDENCE_TABLE_COLUMNS,
+  tr,
+  type Lang,
+} from "../i18n.js";
 
 export interface ArticleDomain {
   id: string;
@@ -62,6 +69,7 @@ export interface GenerateTopicOptionsInput {
   domain: ArticleDomain;
   n?: number;
   researchContext?: string;
+  lang?: Lang;
 }
 
 export interface GenerateArticleInput {
@@ -70,38 +78,115 @@ export interface GenerateArticleInput {
   styleSummary?: string;
   targetLength?: "short" | "medium" | "long";
   researchContext?: string;
+  lang?: Lang;
 }
 
 type ChatFn = (prompt: string, opts?: ChatOptions) => Promise<string>;
 
-export const ARTICLE_DOMAINS: ArticleDomain[] = [
-  { id: "ai-tech", name: "AI 与科技", desc: "大模型、产品、工具、创业与技术趋势" },
-  { id: "business", name: "商业与财经", desc: "公司、行业、消费、投资与商业模式" },
-  { id: "workplace", name: "职场与成长", desc: "效率、管理、沟通、职业选择与个人成长" },
-  { id: "education", name: "教育与学习", desc: "学习方法、家庭教育、升学、知识服务" },
-  { id: "health-life", name: "健康与生活方式", desc: "身心健康、日常习惯、城市生活与消费选择" },
-  { id: "culture", name: "文化与读书", desc: "书影、历史、人物、审美和公共表达" },
-  { id: "society", name: "社会观察", desc: "热点事件、公共议题、人群变化和城市议题" },
-  { id: "personal-brand", name: "个人品牌与自媒体", desc: "内容运营、IP、公众号、社群和变现" },
-];
-
-export function resolveArticleDomain(domainId?: string, customDomain?: string): ArticleDomain {
-  const picked = ARTICLE_DOMAINS.find((d) => d.id === domainId);
-  if (picked) return picked;
-  const name = customDomain?.trim();
-  if (name) return { id: "custom", name, desc: "用户自定义领域" };
-  return ARTICLE_DOMAINS[0];
+interface ArticleDomainDef {
+  id: string;
+  name: { en: string; zh: string };
+  desc: { en: string; zh: string };
 }
 
-export async function matchArticleDomainFromTitle(title: string, ask: ChatFn = chat): Promise<ArticleDomainMatch> {
-  const raw = await ask(domainMatchPrompt(title), { temperature: 0 });
-  const parsed = await parseJsonWithRepair<unknown>(raw, ask, "领域匹配 JSON 对象");
-  const match = normalizeDomainMatch(parsed);
+const ARTICLE_DOMAIN_DEFS: ArticleDomainDef[] = [
+  {
+    id: "ai-tech",
+    name: { en: "AI & Tech", zh: "AI 与科技" },
+    desc: {
+      en: "LLMs, products, tools, startups, and technology trends",
+      zh: "大模型、产品、工具、创业与技术趋势",
+    },
+  },
+  {
+    id: "business",
+    name: { en: "Business & Finance", zh: "商业与财经" },
+    desc: {
+      en: "Companies, industries, consumption, investing, and business models",
+      zh: "公司、行业、消费、投资与商业模式",
+    },
+  },
+  {
+    id: "workplace",
+    name: { en: "Work & Growth", zh: "职场与成长" },
+    desc: {
+      en: "Productivity, management, communication, career choices, and self-growth",
+      zh: "效率、管理、沟通、职业选择与个人成长",
+    },
+  },
+  {
+    id: "education",
+    name: { en: "Education & Learning", zh: "教育与学习" },
+    desc: {
+      en: "Learning methods, parenting, schooling, and knowledge services",
+      zh: "学习方法、家庭教育、升学、知识服务",
+    },
+  },
+  {
+    id: "health-life",
+    name: { en: "Health & Lifestyle", zh: "健康与生活方式" },
+    desc: {
+      en: "Body and mind, daily habits, city life, and consumer choices",
+      zh: "身心健康、日常习惯、城市生活与消费选择",
+    },
+  },
+  {
+    id: "culture",
+    name: { en: "Culture & Books", zh: "文化与读书" },
+    desc: {
+      en: "Books and film, history, people, aesthetics, and public expression",
+      zh: "书影、历史、人物、审美和公共表达",
+    },
+  },
+  {
+    id: "society",
+    name: { en: "Society", zh: "社会观察" },
+    desc: {
+      en: "Trending events, public issues, demographic shifts, and urban topics",
+      zh: "热点事件、公共议题、人群变化和城市议题",
+    },
+  },
+  {
+    id: "personal-brand",
+    name: { en: "Personal Brand & Creators", zh: "个人品牌与自媒体" },
+    desc: {
+      en: "Content operations, IP, newsletters, communities, and monetization",
+      zh: "内容运营、IP、公众号、社群和变现",
+    },
+  },
+];
+
+const CUSTOM_DOMAIN_DESC = { en: "User-defined domain", zh: "用户自定义领域" };
+
+export function getArticleDomains(lang: Lang): ArticleDomain[] {
+  return ARTICLE_DOMAIN_DEFS.map((d) => ({ id: d.id, name: d.name[lang], desc: d.desc[lang] }));
+}
+
+/** Backward-compatible default (English) list. Prefer getArticleDomains(lang). */
+export const ARTICLE_DOMAINS: ArticleDomain[] = getArticleDomains("en");
+
+export function resolveArticleDomain(domainId?: string, customDomain?: string, lang: Lang = "en"): ArticleDomain {
+  const domains = getArticleDomains(lang);
+  const picked = domains.find((d) => d.id === domainId);
+  if (picked) return picked;
+  const name = customDomain?.trim();
+  if (name) return { id: "custom", name, desc: CUSTOM_DOMAIN_DESC[lang] };
+  return domains[0];
+}
+
+export async function matchArticleDomainFromTitle(
+  title: string,
+  lang: Lang = "en",
+  ask: ChatFn = chat
+): Promise<ArticleDomainMatch> {
+  const raw = await ask(domainMatchPrompt(title, lang), { temperature: 0 });
+  const parsed = await parseJsonWithRepair<unknown>(raw, ask, "domain-match JSON object");
+  const match = normalizeDomainMatch(parsed, lang);
   if (match) {
     return match;
   }
 
-  throw new Error("模型没有返回可用的领域匹配结果");
+  throw new Error("The model did not return a usable domain match.");
 }
 
 export async function generateTopicOptions(
@@ -127,21 +212,22 @@ export async function generateTopicOptions(
         };
   const ask = typeof nOrAsk === "function" ? nOrAsk : maybeAsk;
   const n = options.n ?? 6;
+  const lang: Lang = "lang" in options && options.lang ? options.lang : "en";
   const raw = await ask(
-    articleTopicsPrompt(options.domain.name, options.domain.desc, n, options.researchContext),
+    articleTopicsPrompt(options.domain.name, options.domain.desc, n, options.researchContext, lang),
     { temperature: 0.85 }
   );
-  const parsed = await parseJsonWithRepair<unknown>(raw, ask, "选题 JSON 数组");
+  const parsed = await parseJsonWithRepair<unknown>(raw, ask, "topics JSON array");
   const topicItems = topicArray(parsed);
   if (!topicItems) {
-    throw new Error("模型没有返回可用选题，请重试");
+    throw new Error("The model did not return usable topics; please retry.");
   }
   const topics = topicItems
-    .map((item, index) => normalizeTopic(item, index))
+    .map((item, index) => normalizeTopic(item, index, lang))
     .filter((item): item is TopicOption => Boolean(item))
     .slice(0, n);
   if (topics.length === 0) {
-    throw new Error("模型没有返回可用选题，请重试");
+    throw new Error("The model did not return usable topics; please retry.");
   }
   return topics;
 }
@@ -151,10 +237,10 @@ export async function generateArticleDraft(
   ask: ChatFn = chat
 ): Promise<GeneratedArticle> {
   const raw = await ask(articleDraftPrompt(input), { temperature: 0.72 });
-  const parsed = await parseJsonWithRepair<unknown>(raw, ask, "文章 JSON 对象");
+  const parsed = await parseJsonWithRepair<unknown>(raw, ask, "article JSON object");
   const article = normalizeArticle(parsed);
   if (!article) {
-    throw new Error("模型没有返回可用的文章 JSON");
+    throw new Error("The model did not return a usable article JSON.");
   }
   return article;
 }
@@ -165,7 +251,7 @@ export function articleToDocParagraphs(article: GeneratedArticle): { kind: ParaK
     .map(({ kind, text }) => ({ kind, text }));
 }
 
-export function articleToDocBlocks(article: GeneratedArticle): DocxBlock[] {
+export function articleToDocBlocks(article: GeneratedArticle, lang: Lang = "en"): DocxBlock[] {
   const blocks: DocxBlock[] = [
     { type: "paragraph", kind: "heading1", text: article.title },
   ];
@@ -188,7 +274,7 @@ export function articleToDocBlocks(article: GeneratedArticle): DocxBlock[] {
   }
 
   if (article.references && article.references.length > 0) {
-    blocks.push({ type: "paragraph", kind: "heading2", text: "参考文献" });
+    blocks.push({ type: "paragraph", kind: "heading2", text: tr(ARTICLE_LABELS.references, lang) });
     blocks.push(
       ...article.references.map((reference) => ({
         type: "paragraph" as const,
@@ -203,7 +289,8 @@ export function articleToDocBlocks(article: GeneratedArticle): DocxBlock[] {
 
 export function articleToRenderBlocks(
   article: GeneratedArticle,
-  paragraphs: { index: number; text: string }[] = []
+  paragraphs: { index: number; text: string }[] = [],
+  lang: Lang = "en"
 ): ArticleRenderBlock[] {
   let cursor = 0;
   const takeParagraphIndex = (text: string): number | undefined => {
@@ -238,7 +325,11 @@ export function articleToRenderBlocks(
   }
 
   if (article.references && article.references.length > 0) {
-    blocks.push({ type: "references", title: "参考文献", items: article.references.map((reference) => reference.text) });
+    blocks.push({
+      type: "references",
+      title: tr(ARTICLE_LABELS.references, lang),
+      items: article.references.map((reference) => reference.text),
+    });
   }
 
   return blocks;
@@ -247,7 +338,8 @@ export function articleToRenderBlocks(
 export function enrichArticleWithResearch(
   article: GeneratedArticle,
   items: ResearchItem[],
-  accessedAt = new Date()
+  accessedAt = new Date(),
+  lang: Lang = "en"
 ): GeneratedArticle {
   const evidenceItems = items.slice(0, 8);
   const references = formatReferences(evidenceItems, accessedAt);
@@ -255,18 +347,19 @@ export function enrichArticleWithResearch(
     ...article,
     paragraphs: enforceInlineCitations(article.paragraphs, references.length),
     references,
-    evidenceTable: buildEvidenceTable(evidenceItems),
-    figure: buildEvidenceFigure(article, evidenceItems),
+    evidenceTable: buildEvidenceTable(evidenceItems, lang),
+    figure: buildEvidenceFigure(article, evidenceItems, lang),
   };
 }
 
-function normalizeTopic(item: unknown, index: number): TopicOption | null {
+function normalizeTopic(item: unknown, index: number, lang: Lang = "en"): TopicOption | null {
   if (!item || typeof item !== "object") return null;
   const obj = item as Record<string, unknown>;
   const title = stringField(obj.title);
   if (!title) return null;
-  const angle = stringField(obj.angle) || "从一个具体切口展开";
-  const audience = stringField(obj.audience) || "公众号读者";
+  const angle =
+    stringField(obj.angle) || (lang === "zh" ? "从一个具体切口展开" : "develop from a specific angle");
+  const audience = stringField(obj.audience) || tr(ARTICLE_LABELS.defaultAudience, lang);
   const keywords = Array.isArray(obj.keywords)
     ? obj.keywords
         .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
@@ -312,11 +405,11 @@ function normalizeArticle(item: unknown): GeneratedArticle | null {
   return { title, paragraphs };
 }
 
-function normalizeDomainMatch(item: unknown): ArticleDomainMatch | null {
+function normalizeDomainMatch(item: unknown, lang: Lang = "en"): ArticleDomainMatch | null {
   if (!item || typeof item !== "object") return null;
   const obj = item as Record<string, unknown>;
   const domainId = stringField(obj.domainId);
-  const domain = ARTICLE_DOMAINS.find((entry) => entry.id === domainId);
+  const domain = getArticleDomains(lang).find((entry) => entry.id === domainId);
   if (!domain) return null;
   const confidence = typeof obj.confidence === "number" ? obj.confidence : Number(obj.confidence);
   const score = Number.isFinite(confidence) ? Math.max(0, Math.min(100, confidence)) : 70;
@@ -330,14 +423,15 @@ function normalizeDomainMatch(item: unknown): ArticleDomainMatch | null {
   };
 }
 
-function domainMatchPrompt(title: string): string {
-  const domains = ARTICLE_DOMAINS.map((domain) => ({
+function domainMatchPrompt(title: string, lang: Lang = "en"): string {
+  const domains = getArticleDomains(lang).map((domain) => ({
     id: domain.id,
     name: domain.name,
     desc: domain.desc,
   }));
 
-  return `你要根据用户输入的公众号文章标题，判断最适合的文章领域。
+  if (lang === "zh") {
+    return `你要根据用户输入的文章标题，判断最适合的文章领域。
 
 可选领域：
 ${JSON.stringify(domains, null, 2)}
@@ -353,6 +447,24 @@ ${title}
 
 严格只输出 JSON 对象：
 {"domainId":"ai-tech","confidence":88,"reasons":["原因1","原因2"]}`;
+  }
+
+  return `Pick the best-fitting article domain for the user's title.
+
+Available domains:
+${JSON.stringify(domains, null, 2)}
+
+User title:
+${title}
+
+Rules:
+1. Choose exactly one domainId from the available domains.
+2. Judge by the meaning of the title, not a single keyword.
+3. If the title spans domains, pick the one that most determines where the article's evidence comes from.
+4. Output 2-4 short reasons explaining the match.
+
+Output strictly a JSON object:
+{"domainId":"ai-tech","confidence":88,"reasons":["reason 1","reason 2"]}`;
 }
 
 function enforceInlineCitations(paragraphs: string[], referenceCount: number): string[] {
@@ -369,29 +481,33 @@ function enforceInlineCitations(paragraphs: string[], referenceCount: number): s
   });
 }
 
-function buildEvidenceTable(items: ResearchItem[]): ArticleTable {
+function buildEvidenceTable(items: ResearchItem[], lang: Lang = "en"): ArticleTable {
   const rows = items.slice(0, 6).map((item, index) => [
     `[${index + 1}]`,
-    item.sourceKind === "paper" ? "论文" : "新闻",
+    item.sourceKind === "paper" ? tr(ARTICLE_LABELS.typePaper, lang) : tr(ARTICLE_LABELS.typeNews, lang),
     item.sourceName,
     shortDate(item.publishedAt),
     truncate(item.summary || item.title, 90),
   ]);
 
   return {
-    title: "表1 主要证据与出处",
-    columns: ["引用", "类型", "来源", "日期", "可验证论据"],
-    rows: rows.length > 0 ? rows : [["-", "-", "-", "-", "本次检索没有返回可用资料，文章不得写具体数据判断。"]],
-    note: "注：表中论据只来自本次检索到的公开来源；正文判断不得超出这些材料。",
+    title: tr(ARTICLE_LABELS.evidenceTableTitle, lang),
+    columns: EVIDENCE_TABLE_COLUMNS[lang],
+    rows: rows.length > 0 ? rows : [["-", "-", "-", "-", tr(ARTICLE_LABELS.evidenceTableEmpty, lang)]],
+    note: tr(ARTICLE_LABELS.evidenceTableNote, lang),
   };
 }
 
-function buildEvidenceFigure(article: GeneratedArticle, items: ResearchItem[]): ArticleFigure {
+function buildEvidenceFigure(article: GeneratedArticle, items: ResearchItem[], lang: Lang = "en"): ArticleFigure {
   const sourceImage = items.find((item) => item.imageUrl);
   if (sourceImage?.imageUrl) {
+    const caption =
+      lang === "zh"
+        ? `图1 图片来源：${sourceImage.sourceName}，《${sourceImage.title}》，${sourceImage.url}`
+        : `Figure 1. Image source: ${sourceImage.sourceName}, "${sourceImage.title}", ${sourceImage.url}`;
     return {
-      title: "图1 来源图片",
-      caption: `图1 图片来源：${sourceImage.sourceName}，《${sourceImage.title}》，${sourceImage.url}`,
+      title: tr(ARTICLE_LABELS.figureSourceTitle, lang),
+      caption,
       imageUrl: sourceImage.imageUrl,
       sourceName: sourceImage.sourceName,
       sourceUrl: sourceImage.url,
@@ -400,21 +516,21 @@ function buildEvidenceFigure(article: GeneratedArticle, items: ResearchItem[]): 
   }
 
   const nodes = [
-    { label: "问题", text: truncate(article.title, 34) },
+    { label: tr(CHAIN_NODE_LABELS.problem, lang), text: truncate(article.title, 34) },
     {
-      label: "证据",
-      text: items[0] ? `[1] ${truncate(items[0].title, 40)}` : "无可用实时来源",
+      label: tr(CHAIN_NODE_LABELS.evidence, lang),
+      text: items[0] ? `[1] ${truncate(items[0].title, 40)}` : tr(ARTICLE_LABELS.noLiveSource, lang),
     },
     {
-      label: "交叉验证",
-      text: items[1] ? `[2] ${truncate(items[1].title, 40)}` : "需补充第二来源",
+      label: tr(CHAIN_NODE_LABELS.crossCheck, lang),
+      text: items[1] ? `[2] ${truncate(items[1].title, 40)}` : tr(ARTICLE_LABELS.needSecondSource, lang),
     },
-    { label: "判断", text: "只给出材料能支撑的结论" },
+    { label: tr(CHAIN_NODE_LABELS.judgment, lang), text: tr(ARTICLE_LABELS.conclusionNode, lang) },
   ];
 
   return {
-    title: "图1 证据链路图",
-    caption: "图1 基于检索来源形成的论证链路。每个判断必须回到对应来源，不能把推测写成事实。",
+    title: tr(ARTICLE_LABELS.figureChainTitle, lang),
+    caption: tr(ARTICLE_LABELS.figureChainCaption, lang),
     svg: evidenceSvg(nodes),
   };
 }

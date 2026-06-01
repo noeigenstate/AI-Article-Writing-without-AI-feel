@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useStore } from "../store.js";
 import RewritePopover from "./SentencePopover.js";
 import { fetchAlternatives, fetchTitles, type ArticleRenderBlockDTO, type ParagraphDTO } from "../api.js";
+import { messages } from "../i18n.js";
 
 type Selected =
   | { kind: "sentence"; paraIndex: number; sentenceIdx: number; sentence: string; context: string }
@@ -12,6 +13,8 @@ export default function DocEditor() {
   const renderBlocks = useStore((s) => s.renderBlocks);
   const titleIndex = useStore((s) => s.titleIndex);
   const docId = useStore((s) => s.docId)!;
+  const lang = useStore((s) => s.lang);
+  const t = messages[lang];
   const setSentence = useStore((s) => s.setSentence);
   const setParagraph = useStore((s) => s.setParagraph);
   const [sel, setSel] = useState<Selected | null>(null);
@@ -26,7 +29,7 @@ export default function DocEditor() {
         <h1 key={p.index} className="para doc-title">
           <span
             className="sentence title-pick"
-            title="点击重拟标题"
+            title={t.clickRetitle}
             onClick={() => setSel({ kind: "title", paraIndex: p.index, text })}
           >
             {text}
@@ -45,7 +48,7 @@ export default function DocEditor() {
             <span
               key={i}
               className="sentence"
-              title="点击换个说法 / 编辑"
+              title={t.clickRephrase}
               onClick={() =>
                 setSel({ kind: "sentence", paraIndex: p.index, sentenceIdx: i, sentence: s, context })
               }
@@ -78,7 +81,7 @@ export default function DocEditor() {
                   <>
                     {" "}
                     <a href={block.sourceUrl} target="_blank" rel="noreferrer">
-                      查看来源
+                      {t.viewSource}
                     </a>
                   </>
                 )}
@@ -124,9 +127,9 @@ export default function DocEditor() {
 
       {sel?.kind === "sentence" && (
         <RewritePopover
-          heading="换个说法"
+          heading={t.rephraseHeading}
           original={sel.sentence}
-          loadCandidates={() => fetchAlternatives(docId, sel.context, sel.sentence, 3)}
+          loadCandidates={() => fetchAlternatives(docId, sel.context, sel.sentence, 3, lang)}
           onAdopt={(text) => {
             setSentence(sel.paraIndex, sel.sentenceIdx, text);
             setSel(null);
@@ -137,9 +140,9 @@ export default function DocEditor() {
 
       {sel?.kind === "title" && (
         <RewritePopover
-          heading="重拟标题"
+          heading={t.retitleHeading}
           original={sel.text}
-          loadCandidates={() => fetchTitles(docId, 3)}
+          loadCandidates={() => fetchTitles(docId, 3, lang)}
           onAdopt={(text) => {
             setParagraph(sel.paraIndex, text);
             setSel(null);

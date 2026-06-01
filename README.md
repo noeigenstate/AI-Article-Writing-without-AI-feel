@@ -1,133 +1,155 @@
-# MoZheng · 墨证
+<div align="center">
 
-让中文内容写得像人，也站得住。
+# Speak Plainly · 说人话
 
-墨证是一个面向中文内容创作者的开源写作工作台：它既能把 Word 文章改得更自然，去掉常见的 AI 腔；也能根据领域或标题一键生成公众号文章，并自动检索 arXiv、RSS 新闻源和公开网页信息，为文章补上引用、图片、表格和证据链。
+**Write like a human, not a bot.**
 
-它不是“再套一层提示词”的 AI 写作壳。墨证的目标是把内容生产拆成可检查的步骤：选题、资料、论点、段落、图片、表格、引用、导出，每一步都尽量留下来源和编辑入口。
+An open-source writing workbench that strips the "AI smell" out of your drafts and generates evidence-backed articles — in **English or Chinese**.
 
-## 截图
+[![License: MIT](https://img.shields.io/badge/License-MIT-22a06b.svg)](LICENSE)
+![Node](https://img.shields.io/badge/Node-%E2%89%A518-339933?logo=node.js&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178c6?logo=typescript&logoColor=white)
+![React](https://img.shields.io/badge/React-18-61dafb?logo=react&logoColor=white)
+![PRs welcome](https://img.shields.io/badge/PRs-welcome-ff8fab.svg)
 
-### Word 去 AI 味改写
+English · [中文](README.zh.md)
 
-![墨证 Word 改写入口](assets/screenshots/01-rewrite.png)
+</div>
 
-### 公众号文章生成
+---
 
-![墨证 公众号生成入口](assets/screenshots/02-generate.png)
+Speak Plainly rewrites Word documents to read more naturally, and generates full articles from a domain or a title — pulling in arXiv papers, RSS news, and public web sources to back the text with citations, images, tables, and an evidence chain. The whole UI and the generated content can switch between **English** and **Chinese**.
 
-## 适合做什么
+It is not "yet another prompt wrapper." The goal is to break content production into checkable steps — topic, sources, claims, paragraphs, images, tables, citations, export — leaving a source and an edit handle at each step.
 
-- 把 AI 初稿改成更像真人写的中文文章。
-- 上传 `.docx` 后按内置风格或参考范文进行整篇改写。
-- 点击单句获取多个替代表达，再手动微调。
-- 按领域自动生成公众号选题。
-- 输入标题后，让 AI 自动判断领域并生成公众号文章。
-- 自动聚合 arXiv、新闻 RSS、科技媒体和网页图片，作为写作素材。
-- 生成带图片、表格、参考文献和来源说明的文章。
-- 导出新的 Word 文档，继续进入人工编辑或发布流程。
+## Screenshots
 
-## 功能亮点
+<table>
+<tr>
+<td width="50%" align="center">
+<img src="assets/screenshots/01-rewrite.png" alt="De-AI rewrite for Word" /><br/>
+<sub><b>De-AI rewrite for Word</b></sub>
+</td>
+<td width="50%" align="center">
+<img src="assets/screenshots/02-generate.png" alt="Article generation" /><br/>
+<sub><b>Article generation with live sources</b></sub>
+</td>
+</tr>
+</table>
 
-| 能力 | 说明 |
+## What it's good for
+
+- Turn an AI first draft into text that reads like a real person wrote it.
+- Upload a `.docx` and rewrite the whole thing in a built-in style or against your own samples.
+- Click any sentence to get alternative phrasings, then fine-tune by hand.
+- Auto-generate article topics by domain.
+- Type a title and let the AI pick the domain and write the piece.
+- Aggregate arXiv, news RSS, tech media, and web images as writing material.
+- Produce articles with images, tables, references, and source notes.
+- Export a fresh Word document and continue editing or publishing.
+
+## Highlights
+
+| Capability | What it does |
 | --- | --- |
-| 去 AI 味改写 | 对 Word 正文做风格化改写，减少口号式、模板式、泛泛而谈的表达。 |
-| 范文风格学习 | 可选择内置写作风格，也可上传 `.docx` / `.txt` 范文提取风格画像。 |
-| 逐句编辑 | 文章生成或改写后，点击句子即可获取候选表达，支持直接手动改。 |
-| 公众号选题 | 按领域生成选题，覆盖 AI 科技、商业财经、职场成长、教育、健康、文化、社会观察、自媒体等方向。 |
-| 标题直达 | 用户只输入标题，后端调用 AI 判断领域，再走同一套研究和生成链路。 |
-| 实时资料支持 | 聚合 arXiv 与 RSS/Atom 来源，并做去重、截断、缓存和安全上下文包装。 |
-| 图表与引用 | 生成文章时输出结构化正文、来源图片、证据表格和参考文献。 |
-| Word 导出 | 改写文档保留原始结构；生成文章可导出为 `.docx`。 |
+| De-AI rewrite | Restyles Word body text, cutting slogan-like, templated, and vague phrasing. |
+| Style learning | Pick a built-in style, or upload `.docx` / `.txt` samples to extract a style profile. |
+| Sentence-level editing | After generating or rewriting, click a sentence for alternatives or edit directly. |
+| Topic planning | Generate topics by domain — AI & tech, business, careers, education, health, culture, society, creators. |
+| Title-first flow | Enter only a title; the backend infers the domain, then runs the same research + generation chain. |
+| Live research | Aggregates arXiv and RSS/Atom sources with dedup, truncation, caching, and safe context wrapping. |
+| Figures & citations | Generated articles include structured body text, source images, an evidence table, and references. |
+| Word export | Rewrites preserve original structure; generated articles export to `.docx`. |
+| Bilingual | UI and generated content switch between English and Chinese. |
 
-## 工作流
+## Workflow
 
 ```text
-输入标题或选择领域
+Enter a title or pick a domain
         ↓
-AI 判断领域 / 自动生成选题
+AI infers domain / auto-generates topics
         ↓
-检索 arXiv、RSS、新闻与公开网页图片
+Search arXiv, RSS, news, and public web images
         ↓
-生成正文、图、表格、引用和参考文献
+Generate body, figures, tables, citations, references
         ↓
-Web 端结构化预览与逐句编辑
+Structured preview + sentence-level editing in the web app
         ↓
-导出 Word
+Export to Word
 ```
 
-Word 改写链路：
+Word rewrite chain:
 
 ```text
-上传 Word + 可选范文
+Upload Word + optional samples
         ↓
-解析 docx 段落与标题
+Parse docx paragraphs and headings
         ↓
-提取风格画像
+Extract a style profile
         ↓
-整篇改写 / 单句候选 / 标题候选
+Whole-doc rewrite / sentence alternatives / title alternatives
         ↓
-只替换改动段落并导出 Word
+Replace only changed paragraphs and export Word
 ```
 
-## 技术栈
+## Tech stack
 
-| 模块 | 技术 |
+| Layer | Tech |
 | --- | --- |
-| 前端 | React, Vite, TypeScript, Zustand |
-| 后端 | Node.js, TypeScript, Express |
-| 文档处理 | jszip 解析与导出 `.docx` |
-| 模型接口 | OpenAI SDK 兼容接口，默认 DeepSeek |
-| 研究资料 | arXiv, RSS/Atom, 公开网页元信息 |
-| 输出结构 | 段落、图片、表格、参考文献、Word 文档 |
+| Frontend | React, Vite, TypeScript, Zustand |
+| Backend | Node.js, TypeScript, Express |
+| Documents | jszip for parsing and exporting `.docx` |
+| Model API | OpenAI-compatible API, DeepSeek by default |
+| Research | arXiv, RSS/Atom, public web metadata |
+| Output | Paragraphs, images, tables, references, Word document |
 
-## 项目结构
+## Project structure
 
 ```text
-mozheng/
+speak-plainly/
 ├── backend/
 │   └── src/
-│       ├── server.ts              # Express API 路由
-│       ├── prompts.ts             # 改写、选题、文章生成提示词
+│       ├── server.ts              # Express API routes
+│       ├── prompts.ts             # Rewrite / topic / article prompts (EN + ZH)
+│       ├── i18n.ts                # Backend language labels
+│       ├── styles.ts              # Built-in style profiles
 │       ├── services/
-│       │   ├── article.ts         # 公众号文章生成、图表、引用和渲染块
-│       │   ├── docx.ts            # Word 解析与导出
-│       │   ├── llm.ts             # 模型调用
-│       │   ├── rewrite.ts         # 去 AI 味改写链路
-│       │   └── research/          # arXiv、RSS、图片提取、缓存、限流
-│       └── scripts/               # 本地测试脚本
+│       │   ├── article.ts         # Article generation, figures, tables, citations
+│       │   ├── docx.ts            # Word parsing and export
+│       │   ├── llm.ts             # Model calls
+│       │   ├── rewrite.ts         # De-AI rewrite chain
+│       │   └── research/          # arXiv, RSS, image extraction, cache, rate limit
+│       └── scripts/               # Local test scripts
 ├── frontend/
 │   └── src/
 │       ├── App.tsx
 │       ├── api.ts
+│       ├── i18n.ts                # UI dictionary (EN + ZH)
 │       ├── store.ts
 │       └── components/
-│           ├── ArticleGenerator.tsx
-│           ├── DocEditor.tsx
-│           └── UploadPanel.tsx
 ├── assets/screenshots/
 └── README.md
 ```
 
-## 快速开始
+## Quick start
 
-需要 Node.js 18 或更高版本。
+Requires Node.js 18 or newer.
 
-### 1. 配置模型 Key
+### 1. Configure the model key
 
-复制示例配置并填入自己的 Key：
+Copy the example config and fill in your key:
 
 ```bash
 cp backend/.env.example backend/.env
 ```
 
-Windows PowerShell：
+Windows PowerShell:
 
 ```powershell
 Copy-Item backend/.env.example backend/.env
 ```
 
-`backend/.env` 内容示例：
+Example `backend/.env`:
 
 ```env
 DEEPSEEK_API_KEY=your_deepseek_api_key
@@ -138,7 +160,7 @@ LLM_REASONING_EFFORT=high
 PORT=8787
 ```
 
-也可以使用通用变量：
+Or use the generic variables:
 
 ```env
 LLM_API_KEY=your_openai_compatible_api_key
@@ -146,11 +168,11 @@ LLM_BASE_URL=https://api.deepseek.com
 LLM_MODEL=deepseek-v4-pro
 ```
 
-读取优先级：`LLM_API_KEY` 优先，其次 `DEEPSEEK_API_KEY`。
+Precedence: `LLM_API_KEY` first, then `DEEPSEEK_API_KEY`.
 
-不要把真实 API Key 提交到 GitHub。`.env` 已在 `.gitignore` 中忽略。
+Do not commit real API keys. `.env` is already in `.gitignore`.
 
-### 2. 启动后端
+### 2. Start the backend
 
 ```bash
 cd backend
@@ -158,13 +180,9 @@ npm install
 npm start
 ```
 
-默认后端地址：
+Default backend address: `http://localhost:8787`
 
-```text
-http://localhost:8787
-```
-
-### 3. 启动前端
+### 3. Start the frontend
 
 ```bash
 cd frontend
@@ -172,65 +190,63 @@ npm install
 npm run dev
 ```
 
-默认前端地址：
-
-```text
-http://localhost:51773
-```
-
-前端通过 Vite 代理访问后端。需要改后端地址时：
+The frontend reaches the backend through a Vite proxy. To point at a different backend:
 
 ```bash
 BACKEND_URL=http://localhost:8787 npm run dev
 ```
 
-Windows PowerShell：
+Windows PowerShell:
 
 ```powershell
 $env:BACKEND_URL="http://localhost:8787"
 npm run dev
 ```
 
-## 使用指南
+Use the **EN / 中文** toggle in the top-right to switch language; the choice is remembered and also drives the language of generated content.
 
-### 改写 Word
+## Usage
 
-1. 进入「改写 Word」。
-2. 上传待改写的 `.docx`。
-3. 选择内置风格，或上传参考范文。
-4. 点击上传并解析。
-5. 点击整篇润色，或在编辑器中逐句查看候选表达。
-6. 检查结果后导出 Word。
+### Rewrite Word
 
-### 生成公众号文章
+1. Open **Rewrite Word**.
+2. Upload the `.docx` to rewrite.
+3. Pick a built-in style or upload samples.
+4. Upload and parse.
+5. Polish the whole doc, or open the editor for sentence-level alternatives.
+6. Review, then export Word.
 
-1. 进入「生成公众号」。
-2. 输入标题直接生成，或选择领域后自动生成选题。
-3. 系统会检索论文、新闻和公开网页信息。
-4. 生成文章后检查正文、图片、表格与参考文献。
-5. 在编辑器中继续逐句调整。
-6. 导出 Word。
+### Generate an article
 
-## API 一览
+1. Open **Generate article**.
+2. Enter a title directly, or pick a domain and auto-generate topics.
+3. The system searches papers, news, and public web sources.
+4. Review the body, images, tables, and references.
+5. Keep tuning sentence by sentence in the editor.
+6. Export Word.
 
-| 方法 | 路径 | 说明 |
+## API overview
+
+| Method | Path | Description |
 | --- | --- | --- |
-| `GET` | `/api/health` | 检查模型服务连通性 |
-| `GET` | `/api/styles` | 获取内置写作风格 |
-| `POST` | `/api/upload` | 上传 Word 与参考范文 |
-| `POST` | `/api/rewrite` | 整篇去 AI 味改写 |
-| `POST` | `/api/title` | 基于全文生成标题候选 |
-| `POST` | `/api/sentence/alternatives` | 获取单句候选表达 |
-| `POST` | `/api/export` | 导出 Word |
-| `GET` | `/api/article/domains` | 获取公众号文章领域 |
-| `POST` | `/api/article/topics` | 按领域生成选题 |
-| `POST` | `/api/article/generate` | 按选题生成文章 |
-| `POST` | `/api/article/generate-from-title` | 按标题自动匹配领域并生成文章 |
-| `POST` | `/api/research/preview` | 预览研究资料聚合结果 |
+| `GET` | `/api/health` | Check model connectivity |
+| `GET` | `/api/styles?lang=` | Built-in writing styles |
+| `POST` | `/api/upload` | Upload Word + samples |
+| `POST` | `/api/rewrite` | Whole-doc de-AI rewrite |
+| `POST` | `/api/title` | Title alternatives from full text |
+| `POST` | `/api/sentence/alternatives` | Sentence alternatives |
+| `POST` | `/api/export` | Export Word |
+| `GET` | `/api/article/domains?lang=` | Article domains |
+| `POST` | `/api/article/topics` | Topics by domain |
+| `POST` | `/api/article/generate` | Article from a topic |
+| `POST` | `/api/article/generate-from-title` | Article from a title (auto domain) |
+| `POST` | `/api/research/preview` | Preview aggregated research |
 
-## 测试与构建
+All content endpoints accept a `lang` field (`"en"` or `"zh"`) to control the language of generated output.
 
-后端：
+## Test & build
+
+Backend:
 
 ```bash
 cd backend
@@ -240,90 +256,69 @@ npm run test:research
 npm run build
 ```
 
-前端：
+Frontend:
 
 ```bash
 cd frontend
 npm run build
 ```
 
-模型连通性测试：
+Model connectivity test (needs a valid API key):
 
 ```bash
 cd backend
 npm run test:llm
 ```
 
-`test:llm` 需要有效 API Key。
+## Sources
 
-## 资料来源
+Speak Plainly currently supports:
 
-墨证当前支持：
+- **arXiv** — open paper entries and abstracts.
+- **RSS/Atom** — public news, tech, finance, and Chinese-language feeds.
+- **Public web metadata** — prefers `og:image` / `twitter:image` from source pages.
 
-- arXiv：用于获取开放论文条目和摘要。
-- RSS/Atom：用于获取公开新闻、科技、财经和中文内容源。
-- 公开网页元信息：优先读取来源页面的 `og:image`、`twitter:image` 等图片信息。
+Note: RSS, image, and reuse rules differ per outlet. The project only aggregates technically; it does not grant reuse rights. Before publishing, verify sources, copyright, facts, and citation format by hand.
 
-注意：不同媒体的 RSS、图片和转载规则不一样。项目只做技术聚合，不自动授予转载权。公开发布前需要人工确认来源、版权、事实和引用格式。
+## Content quality principles
 
-## 内容质量原则
+When generating articles, the prompts push for:
 
-生成公众号文章时，项目提示词会尽量约束以下要求：
+- No AI filler phrases.
+- No vague transitions padding length.
+- Every claim tied to data, sources, or explicit references.
+- Clear paragraph-to-paragraph progression.
+- Images preferred from cited sources, shown with caption and source.
+- Reference formatting close to academic style.
 
-- 不写 AI 口头禅。
-- 不用空泛过渡句堆篇幅。
-- 观点必须绑定资料、数据或明确来源。
-- 段落要有清晰推进关系。
-- 图片优先来自引用来源，并显示说明与来源。
-- 参考文献使用接近学术论文的格式。
+The model can still be wrong. High-stakes, factual, financial, medical, and legal content must be reviewed by a human.
 
-模型仍可能出错。高风险内容、事实判断、财经医疗法律内容必须人工复核。
+## Limitations
 
-## 开源安全检查
-
-开源前建议执行：
-
-```bash
-git status --short
-rg -n "sk-|api[_-]?key|DEEPSEEK_API_KEY|LLM_API_KEY" .
-```
-
-请确认：
-
-- 没有提交 `.env`。
-- 没有提交真实 API Key。
-- 没有提交私有文章样本。
-- 没有提交未授权截图、图片或数据。
-- `personal_paper/`、`docs/`、日志文件和上传目录保持忽略。
-
-如果真实 Key 曾经进入 Git 历史，请先轮换 Key，再清理历史后公开仓库。
-
-## 当前限制
-
-- 生成结果依赖模型质量和实时来源质量，需要人工复核。
-- RSS 来源可用性会变化，部分站点可能没有稳定公开 feed。
-- Word 导出会尽量保留结构，但被改写段落的段内字符级样式不能完全还原。
-- 文档当前存放在后端内存中，服务重启后会失效。
-- 公网部署前需要补鉴权、限流、持久化存储和更严格的上传文件限制。
+- Output quality depends on the model and live-source quality; human review is needed.
+- RSS availability varies; some sites lack a stable public feed.
+- Word export preserves structure, but in-paragraph character-level formatting of rewritten paragraphs may not fully round-trip.
+- Documents live in backend memory and are lost on restart.
+- A public deployment needs auth, rate limiting, persistent storage, and stricter upload limits.
 
 ## Roadmap
 
-- 生成结果页截图与演示 GIF。
-- `.env.example` 与 Docker Compose。
-- 公众号封面图、小红书卡片和长图导出。
-- 上传资料库，按自有资料生成文章。
-- 来源可信度评分与引用格式模板。
-- 用户级任务历史和草稿管理。
+- Result-page screenshots and a demo GIF.
+- Docker Compose.
+- Cover images and card/long-image export.
+- Upload a personal source library and generate from it.
+- Source-credibility scoring and citation templates.
+- Per-user history and draft management.
 
-## 贡献
+## Contributing
 
-欢迎提交 Issue 或 Pull Request。建议 PR 尽量小，并说明：
+Issues and pull requests are welcome. Keep PRs small and describe:
 
-- 改动目标
-- 主要实现方式
-- 已执行测试
-- 可能影响的模块
+- The goal of the change
+- The main approach
+- Tests run
+- Modules that might be affected
 
 ## License
 
-本项目基于 [MIT License](LICENSE) 开源，可自由使用、修改和二次开发，仅需保留版权与许可声明。
+Released under the [MIT License](LICENSE) — free to use, modify, and build on, as long as the copyright and license notice are kept.
