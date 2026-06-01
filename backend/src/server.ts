@@ -2,9 +2,23 @@ import express from "express";
 import cors from "cors";
 import multer from "multer";
 import { config } from "./config.js";
-import { parseDocx, exportDocx } from "./services/docx.js";
+import { createDocxFromBlocks, parseDocx, exportDocx } from "./services/docx.js";
 import { splitSentences } from "./services/splitter.js";
 import { health } from "./services/llm.js";
+import {
+  ARTICLE_DOMAINS,
+  articleToDocBlocks,
+  articleToRenderBlocks,
+  enrichArticleWithResearch,
+  generateArticleDraft,
+  generateTopicOptions,
+  matchArticleDomainFromTitle,
+  resolveArticleDomain,
+  type ArticleDomain,
+  type TopicOption,
+} from "./services/article.js";
+import { collectResearch, formatResearchContext } from "./services/research/aggregate.js";
+import { enrichResearchImages } from "./services/research/images.js";
 import {
   extractStyleProfile,
   rewriteDocument,
@@ -31,6 +45,139 @@ app.get("/api/health", async (_req, res) => {
 app.get("/api/styles", (_req, res) => {
   res.json({ styles: BUILTIN_STYLES.map(({ id, name, desc }) => ({ id, name, desc })) });
 });
+
+/** 公众号文章生成：领域列表 */
+app.get("/api/article/domains", (_req, res) => {
+  res.json({ domains: ARTICLE_DOMAINS });
+});
+
+/** 公众号文章生成：按领域自动生成选题 */
+app.post("/api/article/topics", async (req, res) => {
+  try {
+    const { domainId, customDomain, n } = req.body as {
+      domainId?: string;
+      customDomain?: string;
+      n?: number;
+    };
+    const domain = resolveArticleDomain(domainId, customDomain);
+    const bundle = await collectResearch(domain.name, domain.name);
+    const researchContext = formatResearchContext(bundle.items, 10);
+    const topics = await generateTopicOptions({ domain, n: n ?? 6, researchContext });
+    res.json({ domain, topics, research: bundle });
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+/** Research preview context aggregation */
+app.post("/api/research/preview", async (req, res) => {
+  try {
+    const { domainId, customDomain, query } = req.body as {
+      domainId?: string;
+      customDomain?: string;
+      query?: string;
+    };
+    const domain = resolveArticleDomain(domainId, customDomain);
+    const bundle = await collectResearch(domain.name, query?.trim() || domain.name);
+    res.json({ ...bundle, context: formatResearchContext(bundle.items, 8) });
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+/** 公众号文章生成：从选题生成完整文章，并进入现有编辑/导出链路 */
+app.post("/api/article/generate", async (req, res) => {
+  try {
+    const { domainId, customDomain, topic, styleId, targetLength } = req.body as {
+      domainId?: string;
+      customDomain?: string;
+      topic: TopicOption | string;
+      styleId?: string;
+      targetLength?: "short" | "medium" | "long";
+    };
+    if (!topic) return res.status(400).json({ error: "缺少选题 topic" });
+
+    const domain = resolveArticleDomain(domainId, customDomain);
+    res.json(await generateArticlePayload({ domain, topic, styleId, targetLength }));
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+/** 公众号文章生成：输入标题，自动匹配领域并生成文章 */
+app.post("/api/article/generate-from-title", async (req, res) => {
+  try {
+    const { title, styleId, targetLength } = req.body as {
+      title?: string;
+      styleId?: string;
+      targetLength?: "short" | "medium" | "long";
+    };
+    const cleanTitle = title?.trim() ?? "";
+    if (!cleanTitle) return res.status(400).json({ error: "缺少文章标题 title" });
+    if (cleanTitle.length > 120) return res.status(400).json({ error: "标题太长，请控制在 120 字以内" });
+
+    const matchedDomain = await matchArticleDomainFromTitle(cleanTitle);
+    const topic: TopicOption = {
+      id: "title-input",
+      title: cleanTitle,
+      angle: `围绕用户标题展开，领域自动匹配为：${matchedDomain.domain.name}`,
+      audience: "公众号读者",
+      keywords: matchedDomain.reasons.filter((reason) => reason !== "默认匹配"),
+    };
+
+    const payload = await generateArticlePayload({
+      domain: matchedDomain.domain,
+      topic,
+      styleId,
+      targetLength,
+    });
+    res.json({ ...payload, domain: matchedDomain.domain, matchedDomain });
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+async function generateArticlePayload(input: {
+  domain: ArticleDomain;
+  topic: TopicOption | string;
+  styleId?: string;
+  targetLength?: "short" | "medium" | "long";
+}) {
+  const topicTitle = typeof input.topic === "string" ? input.topic : input.topic.title;
+  const bundle = await collectResearch(input.domain.name, topicTitle);
+  const imageItems = await enrichResearchImages(bundle.items);
+  const bundleWithImages = { ...bundle, items: imageItems };
+  const researchContext = formatResearchContext(bundleWithImages.items, 8);
+  const builtin = input.styleId ? getBuiltinStyle(input.styleId) : undefined;
+  const styleSummary = builtin?.profile ?? "公众号文章生成：去 AI 味、短句优先、信息密度高。";
+  const draft = await generateArticleDraft({
+    domainName: input.domain.name,
+    topic: input.topic,
+    styleSummary,
+    targetLength: input.targetLength ?? "medium",
+    researchContext,
+  });
+  const article = enrichArticleWithResearch(draft, bundleWithImages.items, new Date(bundle.generatedAt));
+
+  const docx = await createDocxFromBlocks(articleToDocBlocks(article));
+  const parsed = await parseDocx(docx);
+  const rec = saveDoc({ buf: docx, paragraphs: parsed.paragraphs, styleSummary });
+
+  return {
+    docId: rec.id,
+    styleSummary,
+    research: bundleWithImages,
+    renderBlocks: articleToRenderBlocks(article, parsed.paragraphs),
+    titleIndex: titleIndexOf(parsed.paragraphs),
+    paragraphs: parsed.paragraphs.map((p) => ({
+      index: p.index,
+      kind: p.kind,
+      original: p.text,
+      rewritten: p.text,
+      sentences: splitSentences(p.text),
+    })),
+  };
+}
 
 /**
  * 上传目标 docx（字段 file）+ 可选范文（字段 references[]，docx 或 txt）。
@@ -174,5 +321,5 @@ app.post("/api/export", async (req, res) => {
 });
 
 app.listen(config.port, () => {
-  console.log(`speak-plainly backend listening on http://localhost:${config.port}`);
+  console.log(`mozheng backend listening on http://localhost:${config.port}`);
 });

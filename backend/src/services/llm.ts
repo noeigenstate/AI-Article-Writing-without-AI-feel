@@ -21,7 +21,9 @@ export async function chat(prompt: string, opts: ChatOptions = {}): Promise<stri
     model: config.llm.model,
     temperature: opts.temperature ?? config.llm.temperature,
     messages,
-  });
+    stream: false,
+    ...deepSeekOptions(),
+  } as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming & Record<string, unknown>);
   return res.choices[0]?.message?.content ?? "";
 }
 
@@ -40,7 +42,8 @@ export async function chatStream(
     temperature: opts.temperature ?? config.llm.temperature,
     messages,
     stream: true,
-  });
+    ...deepSeekOptions(),
+  } as OpenAI.Chat.ChatCompletionCreateParamsStreaming & Record<string, unknown>);
 
   let full = "";
   for await (const part of stream) {
@@ -61,4 +64,11 @@ export async function health(): Promise<{ ok: boolean; model: string; error?: st
   } catch (e) {
     return { ok: false, model: config.llm.model, error: (e as Error).message };
   }
+}
+
+function deepSeekOptions(): Record<string, unknown> {
+  const extra: Record<string, unknown> = {};
+  if (config.llm.thinkingType) extra.thinking = { type: config.llm.thinkingType };
+  if (config.llm.reasoningEffort) extra.reasoning_effort = config.llm.reasoningEffort;
+  return extra;
 }

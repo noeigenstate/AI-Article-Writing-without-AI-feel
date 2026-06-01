@@ -1,12 +1,16 @@
 {
-  "name": "speak-plainly-backend",
+  "name": "mozheng-backend",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
+    "build": "tsc -p tsconfig.json",
     "test:docx": "tsx src/scripts/test-docx.ts",
+    "test:article": "tsx src/scripts/test-article.ts",
+    "test:research": "tsx src/scripts/test-research.ts",
     "test:llm": "tsx src/scripts/test-llm.ts",
     "test:full": "tsx src/scripts/test-full.ts",
     "probe:tics": "tsx src/scripts/probe-tics.ts"
@@ -15,6 +19,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "fast-xml-parser": "^5.8.0",
     "jszip": "^3.10.1",
     "multer": "^1.4.5-lts.1",
     "openai": "^4.67.0"
