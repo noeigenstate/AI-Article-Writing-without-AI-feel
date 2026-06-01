@@ -3,9 +3,12 @@ import UploadPanel from "./components/UploadPanel.js";
 import ArticleGenerator from "./components/ArticleGenerator.js";
 import DocEditor from "./components/DocEditor.js";
 import { ChatLogo, Flower, Heart } from "./components/icons.js";
+import { messages } from "./i18n.js";
 
 export default function App() {
-  const { step, mode, busy, error, styleSummary, doRewrite, doExport, reset, setMode } = useStore();
+  const { lang, step, mode, busy, error, styleSummary, doRewrite, doExport, reset, setMode, setLang } =
+    useStore();
+  const t = messages[lang];
 
   return (
     <div className="app">
@@ -19,32 +22,39 @@ export default function App() {
           <span className="logo">
             <ChatLogo />
           </span>
-          <h1>MoZheng · 墨证</h1>
+          <h1>Speak Plainly</h1>
+          {lang === "zh" && <span className="brand-zh">说人话</span>}
           <span className="spark">✨</span>
         </div>
 
-        {step === "upload" && (
-          <div className="mode-switch">
-            <button className={mode === "rewrite" ? "active" : ""} onClick={() => setMode("rewrite")}>
-              改写 Word
-            </button>
-            <button className={mode === "generate" ? "active" : ""} onClick={() => setMode("generate")}>
-              生成公众号
-            </button>
-          </div>
-        )}
+        <div className="header-actions">
+          {step === "upload" && (
+            <div className="mode-switch">
+              <button className={mode === "rewrite" ? "active" : ""} onClick={() => setMode("rewrite")}>
+                {t.modeRewrite}
+              </button>
+              <button className={mode === "generate" ? "active" : ""} onClick={() => setMode("generate")}>
+                {t.modeGenerate}
+              </button>
+            </div>
+          )}
 
-        {step === "ready" && (
-          <div className="toolbar">
-            <button className="primary" onClick={doRewrite}>
-              整篇润色（去 AI 味）
-            </button>
-            <button onClick={doExport}>导出 Word</button>
-            <button className="ghost" onClick={reset}>
-              重新开始
-            </button>
-          </div>
-        )}
+          {step === "ready" && (
+            <div className="toolbar">
+              <button className="primary" onClick={doRewrite}>
+                {t.polishAll}
+              </button>
+              <button onClick={doExport}>{t.exportWord}</button>
+              <button className="ghost" onClick={reset}>
+                {t.restart}
+              </button>
+            </div>
+          )}
+
+          <button className="lang-toggle" onClick={() => setLang(lang === "en" ? "zh" : "en")}>
+            {t.langToggle}
+          </button>
+        </div>
       </header>
 
       {error && <div className="error banner">{error}</div>}
@@ -52,16 +62,14 @@ export default function App() {
 
       {step === "ready" && styleSummary && (
         <details className="style-box">
-          <summary>已提取的风格画像</summary>
+          <summary>{t.styleProfile}</summary>
           <pre>{styleSummary}</pre>
         </details>
       )}
 
       <main>{step === "upload" ? mode === "rewrite" ? <UploadPanel /> : <ArticleGenerator /> : <DocEditor />}</main>
 
-      {step === "ready" && (
-        <footer className="hint">点任意句子 → 选候选表达或手动编辑。改完点「导出 Word」。</footer>
-      )}
+      {step === "ready" && <footer className="hint">{t.editorHint}</footer>}
 
       <div className="deco flower">
         <Flower />

@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { useStore } from "../store.js";
+import { messages } from "../i18n.js";
 
 interface Props {
   heading: string;
@@ -16,6 +18,8 @@ export default function RewritePopover({
   onAdopt,
   onClose,
 }: Props) {
+  const lang = useStore((s) => s.lang);
+  const t = messages[lang];
   const [loading, setLoading] = useState(true);
   const [alts, setAlts] = useState<string[]>([]);
   const [edit, setEdit] = useState(original);
@@ -39,14 +43,14 @@ export default function RewritePopover({
         <div className="popover-head">
           <span>{heading}</span>
           <button className="link" onClick={onClose}>
-            关闭
+            {t.close}
           </button>
         </div>
 
-        <div className="orig">原文：{original}</div>
+        <div className="orig">{t.originalLabel}{original}</div>
 
         <div className="alts">
-          {loading && <div className="hint">生成候选中…</div>}
+          {loading && <div className="hint">{t.loadingCandidates}</div>}
           {err && <div className="error">{err}</div>}
           {!loading &&
             !err &&
@@ -56,16 +60,16 @@ export default function RewritePopover({
               </button>
             ))}
           {!loading && !err && alts.length === 0 && (
-            <div className="hint">没拿到候选，可手动编辑。</div>
+            <div className="hint">{t.noCandidates}</div>
           )}
         </div>
 
         <div className="edit-area">
-          <label>手动编辑：</label>
+          <label>{t.manualEdit}</label>
           <textarea value={edit} onChange={(e) => setEdit(e.target.value)} rows={3} />
           <div className="row-end">
             <button className="primary" onClick={() => onAdopt(edit)}>
-              采用这段
+              {t.adopt}
             </button>
           </div>
         </div>

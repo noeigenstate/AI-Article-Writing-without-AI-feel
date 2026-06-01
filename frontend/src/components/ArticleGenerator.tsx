@@ -8,12 +8,7 @@ import {
 } from "../api.js";
 import { useStore } from "../store.js";
 import { Sparkle } from "./icons.js";
-
-const LENGTHS: { id: TargetLength; label: string }[] = [
-  { id: "medium", label: "常规" },
-  { id: "short", label: "短文" },
-  { id: "long", label: "长文" },
-];
+import { messages } from "../i18n.js";
 
 export default function ArticleGenerator() {
   const styles = useStore((s) => s.styles);
@@ -24,6 +19,13 @@ export default function ArticleGenerator() {
   const doGenerateArticleFromTitle = useStore((s) => s.doGenerateArticleFromTitle);
   const research = useStore((s) => s.research);
   const setResearch = useStore((s) => s.setResearch);
+  const lang = useStore((s) => s.lang);
+  const t = messages[lang];
+  const LENGTHS: { id: TargetLength; label: string }[] = [
+    { id: "medium", label: t.lengthRegular },
+    { id: "short", label: t.lengthShort },
+    { id: "long", label: t.lengthLong },
+  ];
   const [domainId, setDomainId] = useState("");
   const [customDomain, setCustomDomain] = useState("");
   const [titleInput, setTitleInput] = useState("");
@@ -55,7 +57,7 @@ export default function ArticleGenerator() {
     setTopicError(null);
     setResearchError(null);
     try {
-      const response = await fetchArticleTopics(domainId, domainId === "custom" ? customDomain : "", 6);
+      const response = await fetchArticleTopics(domainId, domainId === "custom" ? customDomain : "", 6, lang);
       setTopics(response.topics);
       setResearch(response.research ?? null);
     } catch (e) {
@@ -69,7 +71,7 @@ export default function ArticleGenerator() {
     setResearchBusy(true);
     setResearchError(null);
     try {
-      const bundle = await previewResearch(domainId, domainId === "custom" ? customDomain : "");
+      const bundle = await previewResearch(domainId, domainId === "custom" ? customDomain : "", "", lang);
       setResearch(bundle);
     } catch (e) {
       setResearchError((e as Error).message);
@@ -101,7 +103,7 @@ export default function ArticleGenerator() {
   async function generateFromTitle() {
     const title = titleInput.trim();
     if (!title) {
-      setTopicError("请输入文章标题");
+      setTopicError(t.enterTitleErr);
       return;
     }
     setGeneratingTopicId("title-input");
@@ -123,7 +125,7 @@ export default function ArticleGenerator() {
       <div className="step lavender">
         <div className="step-head">
           <span className="badge lavender">1</span>
-          <h2>输入标题或选择领域</h2>
+          <h2>{t.genStep1}</h2>
         </div>
 
         <div className="title-generate">
@@ -135,7 +137,7 @@ export default function ArticleGenerator() {
               setTitleInput(e.target.value);
               setTopicError(null);
             }}
-            placeholder="输入标题，AI 自动判断领域并生成文章"
+            placeholder={t.titlePlaceholder}
           />
           <button
             className="primary"
@@ -145,7 +147,7 @@ export default function ArticleGenerator() {
             }}
           >
             <Sparkle />
-            {generatingTopicId === "title-input" ? "生成中…" : "按标题生成"}
+            {generatingTopicId === "title-input" ? t.generating : t.generateByTitle}
           </button>
         </div>
 
@@ -168,8 +170,8 @@ export default function ArticleGenerator() {
               clearDomainState("custom");
             }}
           >
-            <span>自定义领域</span>
-            <small>输入你想写的垂直方向</small>
+            <span>{t.customDomain}</span>
+            <small>{t.customDomainDesc}</small>
           </button>
         </div>
         {domainId === "custom" && (
@@ -184,7 +186,7 @@ export default function ArticleGenerator() {
               setResearchError(null);
               setGeneratingTopicId(null);
             }}
-            placeholder="例如：新能源车、本地生活、心理咨询"
+            placeholder={t.customDomainPlaceholder}
           />
         )}
       </div>
@@ -192,7 +194,7 @@ export default function ArticleGenerator() {
       <div className="step mint">
         <div className="step-head">
           <span className="badge mint">2</span>
-          <h2>生成并选择选题</h2>
+          <h2>{t.genStep2}</h2>
         </div>
         <div className="generator-row">
           <select
@@ -200,7 +202,7 @@ export default function ArticleGenerator() {
             value={styleId}
             onChange={(e) => setStyleId(e.target.value)}
           >
-            <option value="">默认公众号口吻</option>
+            <option value="">{t.defaultTone}</option>
             {styles.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
@@ -220,39 +222,37 @@ export default function ArticleGenerator() {
           </div>
           <button className="primary" disabled={topicBusy || customDisabled || isGeneratingArticle} onClick={loadTopics}>
             <Sparkle />
-            {topicBusy ? "生成中…" : "自动生成选题"}
+            {topicBusy ? t.generating : t.autoTopics}
           </button>
           <button className="primary" disabled={researchBusy || customDisabled || isGeneratingArticle} onClick={loadResearch}>
             <Sparkle />
-            {researchBusy ? "检索中…" : "前沿资料"}
+            {researchBusy ? t.researching : t.researchBtn}
           </button>
         </div>
         {topicError && <div className="error topic-error">{topicError}</div>}
         {researchError && <div className="error topic-error">{researchError}</div>}
         {selectedDomain && !topics.length && !topicBusy && (
-          <p className="hint pick-desc">当前领域：{selectedDomain.name}</p>
+          <p className="hint pick-desc">{t.currentDomain(selectedDomain.name)}</p>
         )}
-        {generatingTopicId && (
-          <p className="hint pick-desc">正在生成文章，通常需要 30-90 秒，完成后会自动进入编辑页。</p>
-        )}
+        {generatingTopicId && <p className="hint pick-desc">{t.generatingNote}</p>}
         {research && (
           <section className="research-strip">
             <div className="research-head">
-              <strong>前沿资料</strong>
-              <span>{research.items.length} 条来源</span>
+              <strong>{t.researchHead}</strong>
+              <span>{t.sourceCount(research.items.length)}</span>
             </div>
             <div className="research-list">
               {previewItems.map((item: ResearchItemDTO) => (
                 <a className="research-item" key={item.id} href={item.url} target="_blank" rel="noreferrer">
                   <span>{item.sourceName}</span>
-                  {item.publishedAt && <time>{new Date(item.publishedAt).toLocaleDateString("zh-CN")}</time>}
+                  {item.publishedAt && <time>{new Date(item.publishedAt).toLocaleDateString(t.dateLocale)}</time>}
                   <strong>{item.title}</strong>
                 </a>
               ))}
             </div>
             {research.unavailableSources.length > 0 && (
               <p className="research-unavailable">
-                部分来源暂不可用：{research.unavailableSources.join("、")}
+                {t.unavailableSources(research.unavailableSources.join(lang === "zh" ? "、" : ", "))}
               </p>
             )}
           </section>
@@ -277,7 +277,7 @@ export default function ArticleGenerator() {
                   void generate(topic);
                 }}
               >
-                {generatingTopicId === topic.id ? "生成中…" : "一键生成文章"}
+                {generatingTopicId === topic.id ? t.generating : t.generateArticleBtn}
               </button>
             </article>
           ))}

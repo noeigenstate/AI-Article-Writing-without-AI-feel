@@ -89,6 +89,30 @@ header { position: relative; z-index: 2; }
   letter-spacing: 0.3px;
 }
 .brand .spark { color: #f6c453; font-size: 22px; }
+.brand-zh {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
+  opacity: 0.7;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.lang-toggle {
+  min-width: 56px;
+  padding: 8px 16px;
+  font-weight: 700;
+  border-radius: var(--r-pill);
+  background: var(--panel);
+  color: var(--ink-strong);
+  box-shadow: 0 6px 14px rgba(190, 155, 110, 0.2), inset 0 2px 4px rgba(255, 255, 255, 0.8);
+}
+.lang-toggle:hover { transform: translateY(-1px); }
 
 .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin: 18px 0 4px; }
 

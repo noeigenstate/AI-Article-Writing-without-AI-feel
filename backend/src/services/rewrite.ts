@@ -5,6 +5,7 @@ import {
   alternativesPrompt,
   rewriteTitlePrompt,
 } from "../prompts.js";
+import type { Lang } from "../i18n.js";
 
 /** 容错解析模型返回的 JSON（去掉可能的 ```json 包裹） */
 function parseJson<T>(raw: string): T {
@@ -18,9 +19,9 @@ function parseJson<T>(raw: string): T {
 }
 
 /** 从范文提取风格要点 */
-export async function extractStyleProfile(samples: string): Promise<string> {
+export async function extractStyleProfile(samples: string, lang: Lang = "en"): Promise<string> {
   if (!samples.trim()) return "";
-  return (await chat(styleProfilePrompt(samples), { temperature: 0.3 })).trim();
+  return (await chat(styleProfilePrompt(samples, lang), { temperature: 0.3 })).trim();
 }
 
 export interface RewriteResult {
@@ -43,9 +44,10 @@ export function titleIndexOf(paragraphs: { index: number; text: string }[]): num
 export async function generateTitles(
   styleSummary: string,
   text: string,
-  n = 3
+  n = 3,
+  lang: Lang = "en"
 ): Promise<string[]> {
-  const raw = await chat(rewriteTitlePrompt(styleSummary, text, n), { temperature: 0.85 });
+  const raw = await chat(rewriteTitlePrompt(styleSummary, text, n, lang), { temperature: 0.85 });
   try {
     const arr = parseJson<string[]>(raw);
     return arr.filter((x) => typeof x === "string" && x.trim()).map((x) => x.trim()).slice(0, n);
@@ -58,7 +60,8 @@ export async function generateTitles(
 export async function rewriteDocument(
   styleSummary: string,
   paragraphs: { index: number; kind: string; text: string }[],
-  chunkSize = 12
+  chunkSize = 12,
+  lang: Lang = "en"
 ): Promise<Map<number, string>> {
   const result = new Map<number, string>();
   const nonEmpty = paragraphs.filter((p) => p.text.trim().length > 0);
@@ -66,7 +69,7 @@ export async function rewriteDocument(
 
   // 标题：独立逻辑，读全文概括起标题（取第一个候选）
   if (titleIndex >= 0) {
-    const titles = await generateTitles(styleSummary, fullText(paragraphs), 1);
+    const titles = await generateTitles(styleSummary, fullText(paragraphs), 1, lang);
     const original = nonEmpty.find((p) => p.index === titleIndex)!.text;
     result.set(titleIndex, titles[0] ?? original);
   }
@@ -80,7 +83,7 @@ export async function rewriteDocument(
   await Promise.all(
     chunks.map(async (chunk) => {
       try {
-        const raw = await chat(rewriteDocPrompt(styleSummary, chunk), { temperature: 0.7 });
+        const raw = await chat(rewriteDocPrompt(styleSummary, chunk, lang), { temperature: 0.7 });
         const items = parseJson<{ index: number | string; text: unknown }[]>(raw);
         for (const it of items) {
           const idx = Number(it.index); // 模型可能把序号返回成字符串
@@ -102,9 +105,10 @@ export async function generateAlternatives(
   styleSummary: string,
   context: string,
   sentence: string,
-  n = 3
+  n = 3,
+  lang: Lang = "en"
 ): Promise<string[]> {
-  const raw = await chat(alternativesPrompt(styleSummary, context, sentence, n), {
+  const raw = await chat(alternativesPrompt(styleSummary, context, sentence, n, lang), {
     temperature: 0.9,
   });
   try {
