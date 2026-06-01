@@ -2,6 +2,8 @@
  * 提示词模板 —— 去 AI 味改写的核心逻辑都在这里，便于单独调优。
  */
 
+import type { GenerateArticleInput, TopicOption } from "./services/article.js";
+
 /** 「AI 味」的可操作定义，所有改写共用 */
 export const ANTI_AI_RULES = `你在帮中文作者去除文章里的"AI 味"。AI 味的典型表现：
 1. 套话式开头/收尾：综上所述、总而言之、值得注意的是、在当今社会、随着……的发展。
@@ -99,4 +101,74 @@ ${context}
 目标句：${sentence}
 
 严格只输出 JSON 字符串数组，例如 ["写法一","写法二"]，不要任何额外文字、不要 markdown 代码块。`;
+}
+
+/** 按领域自动生成公众号选题 */
+export function articleTopicsPrompt(
+  domainName: string,
+  domainDesc: string,
+  n: number,
+  researchContext = ""
+): string {
+  return `${ANTI_AI_RULES}
+
+你是一个公众号选题策划。请围绕下面领域生成 ${n} 个适合公众号文章的一手选题。
+
+领域：${domainName}
+领域说明：${domainDesc}
+
+最新参考资料：
+${researchContext || "（暂无实时资料，按领域常识生成，但不要编造具体事实。）"}
+
+选题要求：
+1. 选题要具体，不要泛泛写"趋势""启示""思考"。
+2. 每个选题要有清晰切口，读者一看就知道文章会讲什么。
+3. 避开营销号标题党，不能承诺无法验证的结果。
+4. 优先给出能写成长文、能展开案例和观点的题目。
+
+严格只输出 JSON 数组，每项形如：
+{"title":"选题标题","angle":"文章切入角度","audience":"适合读者","keywords":["关键词1","关键词2"]}
+不要任何额外文字、不要 markdown 代码块。`;
+}
+
+/** 从选题生成完整公众号文章 */
+export function articleDraftPrompt(input: GenerateArticleInput): string {
+  const topic =
+    typeof input.topic === "string" ? { title: input.topic } : (input.topic as TopicOption);
+  const lengthHint =
+    input.targetLength === "short"
+      ? "约 900-1200 字，段落更短，适合快速发布。"
+      : input.targetLength === "long"
+        ? "约 1800-2400 字，需要有更充分的案例、判断和收束。"
+        : "约 1300-1800 字，适合常规公众号文章。";
+
+  return `${ANTI_AI_RULES}
+
+你要直接写一篇可发布的中文公众号文章。不要写提纲，不要解释写作思路。
+
+领域：${input.domainName}
+选题：${topic.title}
+切入角度：${"angle" in topic ? topic.angle : "围绕选题展开"}
+目标读者：${"audience" in topic ? topic.audience : "公众号读者"}
+目标长度：${lengthHint}
+
+要模仿的风格：
+${input.styleSummary || "（无特定范文，按去 AI 味原则写，短句优先，信息密度高。）"}
+
+最新参考资料：
+${input.researchContext || "（暂无实时资料。不要编造新闻、论文或数据。）"}
+
+写作要求：
+1. 开头直接进入问题或场景，不要说"在当今时代""随着发展"。
+2. 只使用上方参考资料能支撑的事实、数据、机构名、论文结论和新闻事件。资料里没有的内容，不要写。
+3. 每个判断段必须有数据、论文或新闻来源支撑，并在句末使用引用编号，如 [1]、[2]。引用编号只能来自"来源资料 N"。
+4. 段落按逻辑推进：事实背景、关键证据、机制解释、反方或限制、可落地判断。每段只推进一个意思。
+5. 禁止 AI 口头禅和废话：不要写"值得注意的是""不可忽视""赋能""新范式""深度融合""未来可期""综上所述"。
+6. 不要擅自发散，不要写无法验证的预测，不要把推测写成事实。
+7. 语言凝练，论点先行，论据跟上。短句优先，不堆形容词。
+8. 不输出 Markdown，不用列表符号。图、表、参考文献由系统根据来源自动生成，你只负责写正文。
+
+严格只输出 JSON 对象，格式如下：
+{"title":"文章标题","paragraphs":["第一段正文","第二段正文"]}
+不要任何额外文字、不要 markdown 代码块。`;
 }

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useStore } from "../store.js";
 import RewritePopover from "./SentencePopover.js";
-import { fetchAlternatives, fetchTitles } from "../api.js";
+import { fetchAlternatives, fetchTitles, type ArticleRenderBlockDTO, type ParagraphDTO } from "../api.js";
 
 type Selected =
   | { kind: "sentence"; paraIndex: number; sentenceIdx: number; sentence: string; context: string }
@@ -9,54 +9,117 @@ type Selected =
 
 export default function DocEditor() {
   const paragraphs = useStore((s) => s.paragraphs);
+  const renderBlocks = useStore((s) => s.renderBlocks);
   const titleIndex = useStore((s) => s.titleIndex);
   const docId = useStore((s) => s.docId)!;
   const setSentence = useStore((s) => s.setSentence);
   const setParagraph = useStore((s) => s.setParagraph);
   const [sel, setSel] = useState<Selected | null>(null);
 
+  const paragraphByIndex = new Map(paragraphs.map((p) => [p.index, p]));
+  const blocks = renderBlocks ?? paragraphs.map((p) => paragraphBlockFromParagraph(p));
+
+  function renderParagraph(p: ParagraphDTO, isTitle: boolean) {
+    if (isTitle) {
+      const text = p.sentences.join("");
+      return (
+        <h1 key={p.index} className="para doc-title">
+          <span
+            className="sentence title-pick"
+            title="点击重拟标题"
+            onClick={() => setSel({ kind: "title", paraIndex: p.index, text })}
+          >
+            {text}
+          </span>
+        </h1>
+      );
+    }
+
+    const Tag =
+      p.kind === "heading1" ? "h1" : p.kind === "heading2" ? "h2" : p.kind === "heading3" ? "h3" : "p";
+    const context = p.sentences.join("");
+    return (
+      <Tag key={p.index} className={`para ${p.kind}`}>
+        {p.sentences.map((s, i) =>
+          s.trim() ? (
+            <span
+              key={i}
+              className="sentence"
+              title="点击换个说法 / 编辑"
+              onClick={() =>
+                setSel({ kind: "sentence", paraIndex: p.index, sentenceIdx: i, sentence: s, context })
+              }
+            >
+              {s}
+            </span>
+          ) : (
+            <span key={i}>{s}</span>
+          )
+        )}
+      </Tag>
+    );
+  }
+
   return (
     <div className="doc">
-      {paragraphs.map((p) => {
-        // 标题：整段作为一个可点块，单独走"重拟标题"逻辑
-        if (p.index === titleIndex) {
-          const text = p.sentences.join("");
+      {blocks.map((block, index) => {
+        if (block.type === "figure") {
           return (
-            <h1 key={p.index} className="para doc-title">
-              <span
-                className="sentence title-pick"
-                title="点击重拟标题（概括全文、抓住注意力）"
-                onClick={() => setSel({ kind: "title", paraIndex: p.index, text })}
-              >
-                {text}
-              </span>
-            </h1>
+            <figure className="doc-figure" key={`figure-${index}`}>
+              <h2>{block.title}</h2>
+              {block.imageUrl ? (
+                <img src={block.imageUrl} alt={block.title} />
+              ) : (
+                <img src={`data:image/svg+xml;utf8,${encodeURIComponent(block.svg)}`} alt={block.title} />
+              )}
+              <figcaption>
+                {block.caption}
+                {block.sourceUrl && (
+                  <>
+                    {" "}
+                    <a href={block.sourceUrl} target="_blank" rel="noreferrer">
+                      查看来源
+                    </a>
+                  </>
+                )}
+              </figcaption>
+            </figure>
           );
         }
 
-        const Tag =
-          p.kind === "heading1" ? "h1" : p.kind === "heading2" ? "h2" : p.kind === "heading3" ? "h3" : "p";
-        const context = p.sentences.join("");
-        return (
-          <Tag key={p.index} className={`para ${p.kind}`}>
-            {p.sentences.map((s, i) =>
-              s.trim() ? (
-                <span
-                  key={i}
-                  className="sentence"
-                  title="点击换个说法 / 编辑"
-                  onClick={() =>
-                    setSel({ kind: "sentence", paraIndex: p.index, sentenceIdx: i, sentence: s, context })
-                  }
-                >
-                  {s}
-                </span>
-              ) : (
-                <span key={i}>{s}</span>
-              )
-            )}
-          </Tag>
-        );
+        if (block.type === "table") {
+          return (
+            <section className="doc-table-wrap" key={`table-${index}`}>
+              <h2>{block.title}</h2>
+              <table className="doc-table">
+                <thead>
+                  <tr>{block.columns.map((column) => <th key={column}>{column}</th>)}</tr>
+                </thead>
+                <tbody>
+                  {block.rows.map((row, rowIndex) => (
+                    <tr key={rowIndex}>
+                      {row.map((cell, cellIndex) => <td key={cellIndex}>{cell}</td>)}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {block.note && <p className="table-note">{block.note}</p>}
+            </section>
+          );
+        }
+
+        if (block.type === "references") {
+          return (
+            <section className="doc-references" key={`references-${index}`}>
+              <h2>{block.title}</h2>
+              {block.items.map((item) => <p key={item}>{item}</p>)}
+            </section>
+          );
+        }
+
+        const fallback = block.paragraphIndex !== undefined ? paragraphByIndex.get(block.paragraphIndex) : undefined;
+        const paragraph = fallback ?? paragraphFromBlock(block, index);
+        return renderParagraph(paragraph, paragraph.index === titleIndex);
       })}
 
       {sel?.kind === "sentence" && (
@@ -74,7 +137,7 @@ export default function DocEditor() {
 
       {sel?.kind === "title" && (
         <RewritePopover
-          heading="重拟标题（概括全文、抓住注意力）"
+          heading="重拟标题"
           original={sel.text}
           loadCandidates={() => fetchTitles(docId, 3)}
           onAdopt={(text) => {
@@ -86,4 +149,22 @@ export default function DocEditor() {
       )}
     </div>
   );
+}
+
+function paragraphBlockFromParagraph(p: ParagraphDTO): ArticleRenderBlockDTO {
+  return {
+    type: "paragraph",
+    kind: p.kind,
+    text: p.sentences.join(""),
+    paragraphIndex: p.index,
+  };
+}
+
+function paragraphFromBlock(block: Extract<ArticleRenderBlockDTO, { type: "paragraph" }>, index: number): ParagraphDTO {
+  return {
+    index: block.paragraphIndex ?? -1 - index,
+    kind: block.kind,
+    original: block.text,
+    sentences: [block.text],
+  };
 }

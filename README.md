@@ -1,58 +1,329 @@
-# Speak Plainly · 去 AI 味文章改写工具
+# MoZheng · 墨证
 
-上传一篇 Word 文章 + 几篇风格相近的范文，让 AI 模仿范文风格改写正文、去除"AI 味"；
-改写后逐句对照，**点任意句子即可获取多个表达选项**，也可手动编辑，最终导出新的 Word。
+让中文内容写得像人，也站得住。
 
-详细设计见 [`开发计划.md`](开发计划.md)。
+墨证是一个面向中文内容创作者的开源写作工作台：它既能把 Word 文章改得更自然，去掉常见的 AI 腔；也能根据领域或标题一键生成公众号文章，并自动检索 arXiv、RSS 新闻源和公开网页信息，为文章补上引用、图片、表格和证据链。
+
+它不是“再套一层提示词”的 AI 写作壳。墨证的目标是把内容生产拆成可检查的步骤：选题、资料、论点、段落、图片、表格、引用、导出，每一步都尽量留下来源和编辑入口。
+
+## 截图
+
+### Word 去 AI 味改写
+
+![墨证 Word 改写入口](assets/screenshots/01-rewrite.png)
+
+### 公众号文章生成
+
+![墨证 公众号生成入口](assets/screenshots/02-generate.png)
+
+## 适合做什么
+
+- 把 AI 初稿改成更像真人写的中文文章。
+- 上传 `.docx` 后按内置风格或参考范文进行整篇改写。
+- 点击单句获取多个替代表达，再手动微调。
+- 按领域自动生成公众号选题。
+- 输入标题后，让 AI 自动判断领域并生成公众号文章。
+- 自动聚合 arXiv、新闻 RSS、科技媒体和网页图片，作为写作素材。
+- 生成带图片、表格、参考文献和来源说明的文章。
+- 导出新的 Word 文档，继续进入人工编辑或发布流程。
+
+## 功能亮点
+
+| 能力 | 说明 |
+| --- | --- |
+| 去 AI 味改写 | 对 Word 正文做风格化改写，减少口号式、模板式、泛泛而谈的表达。 |
+| 范文风格学习 | 可选择内置写作风格，也可上传 `.docx` / `.txt` 范文提取风格画像。 |
+| 逐句编辑 | 文章生成或改写后，点击句子即可获取候选表达，支持直接手动改。 |
+| 公众号选题 | 按领域生成选题，覆盖 AI 科技、商业财经、职场成长、教育、健康、文化、社会观察、自媒体等方向。 |
+| 标题直达 | 用户只输入标题，后端调用 AI 判断领域，再走同一套研究和生成链路。 |
+| 实时资料支持 | 聚合 arXiv 与 RSS/Atom 来源，并做去重、截断、缓存和安全上下文包装。 |
+| 图表与引用 | 生成文章时输出结构化正文、来源图片、证据表格和参考文献。 |
+| Word 导出 | 改写文档保留原始结构；生成文章可导出为 `.docx`。 |
+
+## 工作流
+
+```text
+输入标题或选择领域
+        ↓
+AI 判断领域 / 自动生成选题
+        ↓
+检索 arXiv、RSS、新闻与公开网页图片
+        ↓
+生成正文、图、表格、引用和参考文献
+        ↓
+Web 端结构化预览与逐句编辑
+        ↓
+导出 Word
+```
+
+Word 改写链路：
+
+```text
+上传 Word + 可选范文
+        ↓
+解析 docx 段落与标题
+        ↓
+提取风格画像
+        ↓
+整篇改写 / 单句候选 / 标题候选
+        ↓
+只替换改动段落并导出 Word
+```
 
 ## 技术栈
 
-- 后端：Node + TypeScript + Express，`jszip` 解析/导出 docx，`openai` SDK 走 OpenAI 兼容接口
-- 前端：React + Vite + TypeScript + Zustand
-- 模型：Xiaomi MiMo `mimo-v2.5-pro`（OpenAI 兼容，可在 `backend/.env` 换）
+| 模块 | 技术 |
+| --- | --- |
+| 前端 | React, Vite, TypeScript, Zustand |
+| 后端 | Node.js, TypeScript, Express |
+| 文档处理 | jszip 解析与导出 `.docx` |
+| 模型接口 | OpenAI SDK 兼容接口，默认 DeepSeek |
+| 研究资料 | arXiv, RSS/Atom, 公开网页元信息 |
+| 输出结构 | 段落、图片、表格、参考文献、Word 文档 |
 
-## 运行
+## 项目结构
 
-需要 Node ≥ 18。
+```text
+mozheng/
+├── backend/
+│   └── src/
+│       ├── server.ts              # Express API 路由
+│       ├── prompts.ts             # 改写、选题、文章生成提示词
+│       ├── services/
+│       │   ├── article.ts         # 公众号文章生成、图表、引用和渲染块
+│       │   ├── docx.ts            # Word 解析与导出
+│       │   ├── llm.ts             # 模型调用
+│       │   ├── rewrite.ts         # 去 AI 味改写链路
+│       │   └── research/          # arXiv、RSS、图片提取、缓存、限流
+│       └── scripts/               # 本地测试脚本
+├── frontend/
+│   └── src/
+│       ├── App.tsx
+│       ├── api.ts
+│       ├── store.ts
+│       └── components/
+│           ├── ArticleGenerator.tsx
+│           ├── DocEditor.tsx
+│           └── UploadPanel.tsx
+├── assets/screenshots/
+└── README.md
+```
 
-### 1. 后端
+## 快速开始
+
+需要 Node.js 18 或更高版本。
+
+### 1. 配置模型 Key
+
+复制示例配置并填入自己的 Key：
+
+```bash
+cp backend/.env.example backend/.env
+```
+
+Windows PowerShell：
+
+```powershell
+Copy-Item backend/.env.example backend/.env
+```
+
+`backend/.env` 内容示例：
+
+```env
+DEEPSEEK_API_KEY=your_deepseek_api_key
+LLM_BASE_URL=https://api.deepseek.com
+LLM_MODEL=deepseek-v4-pro
+LLM_THINKING_TYPE=enabled
+LLM_REASONING_EFFORT=high
+PORT=8787
+```
+
+也可以使用通用变量：
+
+```env
+LLM_API_KEY=your_openai_compatible_api_key
+LLM_BASE_URL=https://api.deepseek.com
+LLM_MODEL=deepseek-v4-pro
+```
+
+读取优先级：`LLM_API_KEY` 优先，其次 `DEEPSEEK_API_KEY`。
+
+不要把真实 API Key 提交到 GitHub。`.env` 已在 `.gitignore` 中忽略。
+
+### 2. 启动后端
 
 ```bash
 cd backend
 npm install
-npm start            # 启动在 http://localhost:8787
+npm start
 ```
 
-模型配置在 `backend/.env`（`LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`）。
+默认后端地址：
 
-### 2. 前端
+```text
+http://localhost:8787
+```
+
+### 3. 启动前端
 
 ```bash
 cd frontend
 npm install
-npm run dev          # 打开 http://localhost:5173
+npm run dev
 ```
 
-前端通过 Vite 代理把 `/api` 转发到后端 8787，直接用即可。
+默认前端地址：
 
-## 使用流程
+```text
+http://localhost:51773
+```
 
-1. 上传待改写的 `.docx`；在「选择改写风格」里选内置「我的风格」（蒸馏自公众号文章）或上传范文，两者可叠加。
-2. 点「整篇改写（去 AI 味）」。标题会**单独按"概括全文+抓住注意力"改写**，正文逐段去 AI 味。
-3. 点任意**句子** → 弹出 3 个候选表达；点**标题** → 弹出多个"概括全文"的标题方案；也可手动编辑 → 「采用这段」。
-4. 点「导出 Word」下载结果。
-
-## 验收脚本（backend）
+前端通过 Vite 代理访问后端。需要改后端地址时：
 
 ```bash
-npm run test:docx    # 解析/切句/导出往返（无需模型）
-npm run test:llm     # 模型连通性 + 单句候选（需有效 API Key）
-npm run test:full    # 整篇改写 + 段落对齐
+BACKEND_URL=http://localhost:8787 npm run dev
 ```
 
-## 已知限制（MVP）
+Windows PowerShell：
 
-- 导出复用原始 docx，**只替换你改动过的段落**，未改动段落一字节不动（含段内字符级格式）。
-- 段落级格式（段落数/顺序/标题层级/列表）完整保留；**被改写**的段落，其段内字符级格式（个别字加粗/变色）会并入整段、不再保留——因为文字变了无法对回原 run。
-- 文档存于后端内存，重启后失效。
-- 整篇改写按 12 段一块并行调用模型；超长文档可调 `rewrite.ts` 的 `chunkSize`。
+```powershell
+$env:BACKEND_URL="http://localhost:8787"
+npm run dev
+```
+
+## 使用指南
+
+### 改写 Word
+
+1. 进入「改写 Word」。
+2. 上传待改写的 `.docx`。
+3. 选择内置风格，或上传参考范文。
+4. 点击上传并解析。
+5. 点击整篇润色，或在编辑器中逐句查看候选表达。
+6. 检查结果后导出 Word。
+
+### 生成公众号文章
+
+1. 进入「生成公众号」。
+2. 输入标题直接生成，或选择领域后自动生成选题。
+3. 系统会检索论文、新闻和公开网页信息。
+4. 生成文章后检查正文、图片、表格与参考文献。
+5. 在编辑器中继续逐句调整。
+6. 导出 Word。
+
+## API 一览
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/api/health` | 检查模型服务连通性 |
+| `GET` | `/api/styles` | 获取内置写作风格 |
+| `POST` | `/api/upload` | 上传 Word 与参考范文 |
+| `POST` | `/api/rewrite` | 整篇去 AI 味改写 |
+| `POST` | `/api/title` | 基于全文生成标题候选 |
+| `POST` | `/api/sentence/alternatives` | 获取单句候选表达 |
+| `POST` | `/api/export` | 导出 Word |
+| `GET` | `/api/article/domains` | 获取公众号文章领域 |
+| `POST` | `/api/article/topics` | 按领域生成选题 |
+| `POST` | `/api/article/generate` | 按选题生成文章 |
+| `POST` | `/api/article/generate-from-title` | 按标题自动匹配领域并生成文章 |
+| `POST` | `/api/research/preview` | 预览研究资料聚合结果 |
+
+## 测试与构建
+
+后端：
+
+```bash
+cd backend
+npm run test:docx
+npm run test:article
+npm run test:research
+npm run build
+```
+
+前端：
+
+```bash
+cd frontend
+npm run build
+```
+
+模型连通性测试：
+
+```bash
+cd backend
+npm run test:llm
+```
+
+`test:llm` 需要有效 API Key。
+
+## 资料来源
+
+墨证当前支持：
+
+- arXiv：用于获取开放论文条目和摘要。
+- RSS/Atom：用于获取公开新闻、科技、财经和中文内容源。
+- 公开网页元信息：优先读取来源页面的 `og:image`、`twitter:image` 等图片信息。
+
+注意：不同媒体的 RSS、图片和转载规则不一样。项目只做技术聚合，不自动授予转载权。公开发布前需要人工确认来源、版权、事实和引用格式。
+
+## 内容质量原则
+
+生成公众号文章时，项目提示词会尽量约束以下要求：
+
+- 不写 AI 口头禅。
+- 不用空泛过渡句堆篇幅。
+- 观点必须绑定资料、数据或明确来源。
+- 段落要有清晰推进关系。
+- 图片优先来自引用来源，并显示说明与来源。
+- 参考文献使用接近学术论文的格式。
+
+模型仍可能出错。高风险内容、事实判断、财经医疗法律内容必须人工复核。
+
+## 开源安全检查
+
+开源前建议执行：
+
+```bash
+git status --short
+rg -n "sk-|api[_-]?key|DEEPSEEK_API_KEY|LLM_API_KEY" .
+```
+
+请确认：
+
+- 没有提交 `.env`。
+- 没有提交真实 API Key。
+- 没有提交私有文章样本。
+- 没有提交未授权截图、图片或数据。
+- `personal_paper/`、`docs/`、日志文件和上传目录保持忽略。
+
+如果真实 Key 曾经进入 Git 历史，请先轮换 Key，再清理历史后公开仓库。
+
+## 当前限制
+
+- 生成结果依赖模型质量和实时来源质量，需要人工复核。
+- RSS 来源可用性会变化，部分站点可能没有稳定公开 feed。
+- Word 导出会尽量保留结构，但被改写段落的段内字符级样式不能完全还原。
+- 文档当前存放在后端内存中，服务重启后会失效。
+- 公网部署前需要补鉴权、限流、持久化存储和更严格的上传文件限制。
+
+## Roadmap
+
+- 生成结果页截图与演示 GIF。
+- `.env.example` 与 Docker Compose。
+- 公众号封面图、小红书卡片和长图导出。
+- 上传资料库，按自有资料生成文章。
+- 来源可信度评分与引用格式模板。
+- 用户级任务历史和草稿管理。
+
+## 贡献
+
+欢迎提交 Issue 或 Pull Request。建议 PR 尽量小，并说明：
+
+- 改动目标
+- 主要实现方式
+- 已执行测试
+- 可能影响的模块
+
+## License
+
+本项目基于 [MIT License](LICENSE) 开源，可自由使用、修改和二次开发，仅需保留版权与许可声明。

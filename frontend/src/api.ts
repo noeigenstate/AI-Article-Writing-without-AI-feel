@@ -14,10 +14,126 @@ export interface StyleDTO {
   desc: string;
 }
 
+export interface ArticleDomainDTO {
+  id: string;
+  name: string;
+  desc: string;
+}
+
+export interface TopicOptionDTO {
+  id: string;
+  title: string;
+  angle: string;
+  audience: string;
+  keywords: string[];
+}
+
+export interface ResearchItemDTO {
+  id: string;
+  sourceKind: "paper" | "news";
+  sourceName: string;
+  title: string;
+  summary: string;
+  url: string;
+  imageUrl?: string;
+  publishedAt: string;
+  authors: string[];
+}
+
+export interface ResearchBundleDTO {
+  query: string;
+  generatedAt: string;
+  items: ResearchItemDTO[];
+  unavailableSources: string[];
+  context?: string;
+}
+
+export type TargetLength = "short" | "medium" | "long";
+
+export type ArticleRenderBlockDTO =
+  | { type: "paragraph"; kind: string; text: string; paragraphIndex?: number }
+  | { type: "figure"; title: string; caption: string; svg: string; imageUrl?: string; sourceName?: string; sourceUrl?: string }
+  | { type: "table"; title: string; columns: string[]; rows: string[][]; note?: string }
+  | { type: "references"; title: string; items: string[] };
+
+export interface GeneratedArticleResponseDTO {
+  docId: string;
+  styleSummary: string;
+  titleIndex: number;
+  paragraphs: ParagraphDTO[];
+  renderBlocks?: ArticleRenderBlockDTO[];
+  research?: ResearchBundleDTO;
+  domain?: ArticleDomainDTO;
+  matchedDomain?: {
+    domain: ArticleDomainDTO;
+    score: number;
+    reasons: string[];
+  };
+}
+
 export async function fetchStyles() {
   const res = await fetch(`${BASE}/styles`);
   if (!res.ok) return [] as StyleDTO[];
   return (await res.json()).styles as StyleDTO[];
+}
+
+export async function fetchArticleDomains() {
+  const res = await fetch(`${BASE}/article/domains`);
+  if (!res.ok) return [] as ArticleDomainDTO[];
+  return (await res.json()).domains as ArticleDomainDTO[];
+}
+
+export async function previewResearch(domainId: string, customDomain = "", query = "") {
+  const res = await fetch(`${BASE}/research/preview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ domainId, customDomain, query }),
+  });
+  if (!res.ok) throw new Error((await res.json()).error ?? "获取前沿资料失败");
+  return res.json() as Promise<ResearchBundleDTO>;
+}
+
+export async function fetchArticleTopics(domainId: string, customDomain = "", n = 6) {
+  const res = await fetch(`${BASE}/article/topics`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ domainId, customDomain, n }),
+  });
+  if (!res.ok) throw new Error((await res.json()).error ?? "生成选题失败");
+  return res.json() as Promise<{
+    topics: TopicOptionDTO[];
+    research?: ResearchBundleDTO;
+  }>;
+}
+
+export async function generateArticle(
+  domainId: string,
+  customDomain: string,
+  topic: TopicOptionDTO,
+  styleId: string,
+  targetLength: TargetLength
+) {
+  const res = await fetch(`${BASE}/article/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ domainId, customDomain, topic, styleId, targetLength }),
+  });
+  if (!res.ok) throw new Error((await res.json()).error ?? "生成文章失败");
+  return res.json() as Promise<GeneratedArticleResponseDTO>;
+}
+
+export async function generateArticleFromTitle(
+  title: string,
+  styleId: string,
+  targetLength: TargetLength
+) {
+  const res = await fetch(`${BASE}/article/generate-from-title`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title, styleId, targetLength }),
+  });
+  if (!res.ok) throw new Error((await res.json()).error ?? "根据标题生成文章失败");
+  return res.json() as Promise<GeneratedArticleResponseDTO>;
 }
 
 export async function uploadFiles(target: File, references: File[], styleId = "") {
