@@ -7,8 +7,10 @@ import {
   fetchArticleDomains,
   generateArticle,
   generateArticleFromTitle,
+  scoreText,
   type ArticleRenderBlockDTO,
   type ArticleDomainDTO,
+  type AiScoreDTO,
   type ParagraphDTO,
   type ResearchBundleDTO,
   type StyleDTO,
@@ -17,6 +19,7 @@ import {
 } from "./api.js";
 import { getStoredLang, storeLang, messages, type Lang } from "./i18n.js";
 
+/** The global app state plus the actions that mutate it (Zustand store shape). */
 interface State {
   lang: Lang;
   docId: string | null;
@@ -31,8 +34,11 @@ interface State {
   styles: StyleDTO[];
   articleDomains: ArticleDomainDTO[];
   research: ResearchBundleDTO | null;
+  aiScore: { before: AiScoreDTO; after: AiScoreDTO } | null; // 改写前后对照
+  currentScore: AiScoreDTO | null; // 当前文档（含手动编辑）的实时分
 
   setLang: (lang: Lang) => void;
+  recomputeScore: () => Promise<void>;
   setMode: (mode: "rewrite" | "generate") => void;
   setResearch: (research: ResearchBundleDTO | null) => void;
   loadStyles: () => Promise<void>;
@@ -53,6 +59,12 @@ interface State {
   reset: () => void;
 }
 
+/**
+ * The single Zustand store backing the whole UI.
+ *
+ * Holds the current document/editor state and exposes async actions that call
+ * the API client and update state (upload, generate, rewrite, score, export).
+ */
 export const useStore = create<State>((set, get) => ({
   lang: getStoredLang(),
   docId: null,
@@ -67,6 +79,19 @@ export const useStore = create<State>((set, get) => ({
   styles: [],
   articleDomains: [],
   research: null,
+  aiScore: null,
+  currentScore: null,
+
+  async recomputeScore() {
+    const { paragraphs, lang } = get();
+    const text = paragraphs.map((p) => p.sentences.join("")).join("\n");
+    if (!text.trim()) return set({ currentScore: null });
+    try {
+      set({ currentScore: await scoreText(text, lang) });
+    } catch {
+      /* 评分失败不阻塞 */
+    }
+  },
 
   setLang(lang) {
     storeLang(lang);
@@ -103,9 +128,12 @@ export const useStore = create<State>((set, get) => ({
         renderBlocks: null,
         titleIndex: r.titleIndex,
         research: null,
+        aiScore: null,
+        currentScore: null,
         step: "ready",
         busy: null,
       });
+      void get().recomputeScore();
     } catch (e) {
       set({ error: (e as Error).message, busy: null });
     }
@@ -122,9 +150,12 @@ export const useStore = create<State>((set, get) => ({
         renderBlocks: r.renderBlocks ?? null,
         titleIndex: r.titleIndex,
         research: r.research ?? null,
+        aiScore: null,
+        currentScore: null,
         step: "ready",
         busy: null,
       });
+      void get().recomputeScore();
     } catch (e) {
       set({ error: (e as Error).message, busy: null });
     }
@@ -141,9 +172,12 @@ export const useStore = create<State>((set, get) => ({
         renderBlocks: r.renderBlocks ?? null,
         titleIndex: r.titleIndex,
         research: r.research ?? null,
+        aiScore: null,
+        currentScore: null,
         step: "ready",
         busy: null,
       });
+      void get().recomputeScore();
     } catch (e) {
       set({ error: (e as Error).message, busy: null });
     }
@@ -155,7 +189,13 @@ export const useStore = create<State>((set, get) => ({
     set({ busy: messages[get().lang].busyRewriting, error: null });
     try {
       const r = await rewriteDoc(docId, get().lang);
-      set({ paragraphs: r.paragraphs, renderBlocks: null, busy: null });
+      set({
+        paragraphs: r.paragraphs,
+        renderBlocks: null,
+        aiScore: r.score ?? null,
+        currentScore: r.score?.after ?? get().currentScore,
+        busy: null,
+      });
     } catch (e) {
       set({ error: (e as Error).message, busy: null });
     }
@@ -208,6 +248,8 @@ export const useStore = create<State>((set, get) => ({
       busy: null,
       error: null,
       research: null,
+      aiScore: null,
+      currentScore: null,
     });
   },
 }));

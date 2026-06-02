@@ -3,6 +3,7 @@ import { fetchNewsFeed } from "./rss.js";
 import { newsSourcesForDomain } from "./sources.js";
 import type { ResearchBundle, ResearchItem } from "./types.js";
 
+/** Build a dedupe key from the normalized URL, falling back to source+title. */
 function normalizeDedupeKey(item: ResearchItem): string {
   const url = item.url.trim().toLowerCase().replace(/\/$/, "");
   if (url) {
@@ -12,11 +13,18 @@ function normalizeDedupeKey(item: ResearchItem): string {
   return `title:${item.sourceName.toLowerCase()}:${item.title.trim().toLowerCase()}`;
 }
 
+/** Parse a date string to epoch millis, or 0 if unparseable. */
 function timestamp(value: string): number {
   const parsed = Date.parse(value);
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
+/**
+ * Deduplicate research items, keeping the most recent of each (by URL, else title).
+ *
+ * @param items Raw items, possibly from several sources.
+ * @returns Deduplicated items, newest first.
+ */
 export function dedupeResearchItems(items: ResearchItem[]): ResearchItem[] {
   const seen = new Set<string>();
   const deduped: ResearchItem[] = [];
@@ -34,10 +42,12 @@ export function dedupeResearchItems(items: ResearchItem[]): ResearchItem[] {
   return deduped;
 }
 
+/** Extract a human-readable message from an unknown thrown value. */
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/** Strip tags and decode common entities to plain text. */
 function stripHtml(value: string): string {
   return value
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
@@ -51,6 +61,7 @@ function stripHtml(value: string): string {
     .replace(/&#39;/gi, "'");
 }
 
+/** Sanitize and clip a field value (strip HTML, drop control chars, truncate). */
 function safeField(value: string, maxLength: number): string {
   const cleaned = stripHtml(value)
     .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, " ")
@@ -64,6 +75,16 @@ function safeField(value: string, maxLength: number): string {
   return `${cleaned.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
 }
 
+/**
+ * Gather research for a domain/query from arXiv and the domain's news feeds.
+ *
+ * Sources are fetched in parallel; a failing source is recorded in
+ * `unavailableSources` rather than failing the whole bundle.
+ *
+ * @param domainName Domain used to pick news feeds.
+ * @param query Search query (also used for arXiv).
+ * @returns A bundle of up to 20 deduplicated items plus any source failures.
+ */
 export async function collectResearch(domainName: string, query: string): Promise<ResearchBundle> {
   const unavailableSources: string[] = [];
   const newsSources = newsSourcesForDomain(domainName).slice(0, 6);
@@ -91,6 +112,16 @@ export async function collectResearch(domainName: string, query: string): Promis
   };
 }
 
+/**
+ * Render research items into a numbered, prompt-injection-guarded context block.
+ *
+ * The leading note tells the model to treat the material as facts only and ignore
+ * any instructions embedded in it.
+ *
+ * @param items Research items.
+ * @param limit Max items to include (default 12).
+ * @returns The context string, or "" when there are no items.
+ */
 export function formatResearchContext(items: ResearchItem[], limit = 12): string {
   const blocks = items
     .slice(0, limit)

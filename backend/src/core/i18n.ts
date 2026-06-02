@@ -3,12 +3,20 @@
  * Backend language support. Frontend passes `lang` per request; falls back to English.
  */
 
+/** Supported UI/content languages. */
 export type Lang = "en" | "zh";
 
+/**
+ * Coerce an arbitrary request value into a supported {@link Lang}.
+ *
+ * @param value Raw `lang` value from a query string or JSON body.
+ * @returns "zh" only when explicitly requested; otherwise "en".
+ */
 export function normalizeLang(value: unknown): Lang {
   return value === "zh" ? "zh" : "en";
 }
 
+/** A bilingual label pair. */
 type Bi = { en: string; zh: string };
 
 /** API 错误信息 / API error messages */
@@ -77,6 +85,13 @@ export const EVIDENCE_TABLE_COLUMNS: Record<Lang, string[]> = {
   zh: ["引用", "类型", "来源", "日期", "可验证论据"],
 };
 
+/**
+ * Resolve a bilingual label to the given language.
+ *
+ * @param entry The bilingual pair.
+ * @param lang Target language.
+ * @returns The localized string.
+ */
 export function tr(entry: Bi, lang: Lang): string {
   return entry[lang];
 }

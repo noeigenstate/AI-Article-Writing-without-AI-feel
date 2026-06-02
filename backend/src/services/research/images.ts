@@ -2,6 +2,16 @@ import { cached } from "./cache.js";
 import { fetchTextWithTimeout } from "./http.js";
 import type { ResearchItem } from "./types.js";
 
+/**
+ * Attach a representative image URL to the first few items that lack one.
+ *
+ * Fetches each source page and reads its og:image/twitter:image; failures are
+ * ignored so enrichment never blocks generation.
+ *
+ * @param items Research items.
+ * @param limit Max items to attempt (default 6).
+ * @returns The items, with `imageUrl` filled in where found.
+ */
 export async function enrichResearchImages(items: ResearchItem[], limit = 6): Promise<ResearchItem[]> {
   const candidates = items.slice(0, limit);
   const imageEntries = await Promise.all(
@@ -21,6 +31,7 @@ export async function enrichResearchImages(items: ResearchItem[], limit = 6): Pr
   });
 }
 
+/** Fetch a page and extract its social-preview image (cached 24h). */
 async function fetchSourceImage(url: string): Promise<string | undefined> {
   return cached(`source-image:${url}`, 24 * 60 * 60 * 1000, async () => {
     const res = await fetchTextWithTimeout(
@@ -40,6 +51,13 @@ async function fetchSourceImage(url: string): Promise<string | undefined> {
   });
 }
 
+/**
+ * Extract a preview image URL from HTML (og:image, twitter:image, image_src).
+ *
+ * @param html The page HTML.
+ * @param pageUrl The page URL, used to resolve relative image URLs.
+ * @returns An absolute http(s) image URL, or undefined.
+ */
 export function extractSourceImageFromHtml(html: string, pageUrl: string): string | undefined {
   const patterns = [
     /<meta\b[^>]*(?:property|name)=["']og:image(?::secure_url)?["'][^>]*content=["']([^"']+)["'][^>]*>/i,
@@ -60,6 +78,7 @@ export function extractSourceImageFromHtml(html: string, pageUrl: string): strin
   return undefined;
 }
 
+/** Resolve a raw image reference against the page URL; accept only http(s). */
 function resolveImageUrl(raw: string | undefined, pageUrl: string): string | undefined {
   if (!raw) {
     return undefined;

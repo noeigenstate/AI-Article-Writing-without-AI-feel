@@ -7,13 +7,16 @@ import JSZip from "jszip";
  * 其余 XML（段落样式、列表、字体等）原样保留 —— 这样能在「段落级」上最大程度保真。
  */
 
+/** Normalized paragraph type. */
 export type ParaKind = "heading1" | "heading2" | "heading3" | "list" | "normal";
 
+/** A unit of generated document content: a paragraph, a table, or a figure. */
 export type DocxBlock =
   | { type: "paragraph"; kind: ParaKind; text: string }
   | { type: "table"; title?: string; columns: string[]; rows: string[][]; note?: string }
   | { type: "figure"; title: string; caption: string; svg: string };
 
+/** One parsed paragraph, aligned by index with the source document. */
 export interface ParsedParagraph {
   index: number;      // 在文档中的段落序号（与导出对齐）
   style: string;      // 原始 pStyle val，如 "Heading1" / ""
@@ -21,6 +24,7 @@ export interface ParsedParagraph {
   text: string;       // 段落纯文本
 }
 
+/** The parsed paragraph structure of a docx. */
 export interface ParsedDoc {
   paragraphs: ParsedParagraph[];
 }
@@ -29,6 +33,7 @@ const P_RE = /<w:p\b[^>]*?(?:\/>|>[\s\S]*?<\/w:p>)/g;
 const PSTYLE_RE = /<w:pStyle\b[^>]*w:val="([^"]*)"/;
 const WT_RE = /<w:t\b[^>]*>([\s\S]*?)<\/w:t>/g;
 
+/** Decode XML entities back to plain text. */
 function decodeXml(s: string): string {
   return s
     .replace(/&lt;/g, "<")
@@ -38,6 +43,7 @@ function decodeXml(s: string): string {
     .replace(/&amp;/g, "&");
 }
 
+/** Encode the XML-significant characters for embedding in document XML. */
 function encodeXml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
@@ -45,6 +51,7 @@ function encodeXml(s: string): string {
     .replace(/>/g, "&gt;");
 }
 
+/** Map a Word pStyle value to a normalized {@link ParaKind}. */
 function styleToKind(style: string): ParaKind {
   const s = style.toLowerCase();
   if (/heading\s*1|^1$|title/.test(s)) return "heading1";
@@ -54,6 +61,7 @@ function styleToKind(style: string): ParaKind {
   return "normal";
 }
 
+/** Map a normalized {@link ParaKind} back to a Word style id ("" for normal). */
 function kindToStyle(kind: ParaKind): string {
   if (kind === "heading1") return "Heading1";
   if (kind === "heading2") return "Heading2";
@@ -62,6 +70,7 @@ function kindToStyle(kind: ParaKind): string {
   return "";
 }
 
+/** Extract the visible text of a `<w:p>` block, stripping leaked Word tags. */
 function paragraphText(block: string): string {
   let text = "";
   for (const m of block.matchAll(WT_RE)) text += decodeXml(m[1]);
@@ -69,7 +78,13 @@ function paragraphText(block: string): string {
   return text.replace(/<\/?w:[^>]*>/g, "");
 }
 
-/** 解析 docx buffer → 段落结构 */
+/**
+ * Parse a docx buffer into its paragraph structure.
+ *
+ * @param buf The docx file bytes.
+ * @returns The parsed paragraphs.
+ * @throws Error if `word/document.xml` is missing (not a valid docx).
+ */
 export async function parseDocx(buf: Buffer): Promise<ParsedDoc> {
   const zip = await JSZip.loadAsync(buf);
   const file = zip.file("word/document.xml");
@@ -94,9 +109,15 @@ export async function parseDocx(buf: Buffer): Promise<ParsedDoc> {
 }
 
 /**
- * 用新文本替换原始 docx 中各段落的文字后，返回新的 docx buffer。
- * @param buf       原始 docx
- * @param newTexts  按段落序号对齐的新文本（undefined / 同序号缺失 = 保持原样）
+ * Replace paragraph text in the original docx and return new bytes.
+ *
+ * Reuses the source docx and only swaps text, so paragraph styles, lists, and
+ * fonts are preserved (paragraph-level fidelity).
+ *
+ * @param buf The original docx.
+ * @param newTexts New text aligned by paragraph index; `undefined`/missing keeps the original.
+ * @returns The rebuilt docx bytes.
+ * @throws Error if `word/document.xml` is missing.
  */
 export async function exportDocx(
   buf: Buffer,
@@ -119,14 +140,24 @@ export async function exportDocx(
   return zip.generateAsync({ type: "nodebuffer" });
 }
 
-/** 从纯文本段落创建一个最小可编辑 docx，用于 AI 直接生成的文章导出。 */
+/**
+ * Build a minimal editable docx from plain paragraphs.
+ *
+ * @param paragraphs Paragraphs with kind and text.
+ * @returns The docx bytes.
+ */
 export async function createDocxFromParagraphs(
   paragraphs: { kind: ParaKind; text: string }[]
 ): Promise<Buffer> {
   return createDocxFromBlocks(paragraphs.map((p) => ({ type: "paragraph", ...p })));
 }
 
-/** 从结构化内容创建 docx，支持段落、Word 表格和嵌入 SVG 图。 */
+/**
+ * Build a docx from structured blocks: paragraphs, Word tables, and embedded SVG figures.
+ *
+ * @param blocks The ordered content blocks.
+ * @returns The docx bytes.
+ */
 export async function createDocxFromBlocks(blocks: DocxBlock[]): Promise<Buffer> {
   const zip = new JSZip();
   zip.file("[Content_Types].xml", contentTypesXml());
@@ -143,6 +174,7 @@ export async function createDocxFromBlocks(blocks: DocxBlock[]): Promise<Buffer>
   return zip.generateAsync({ type: "nodebuffer" });
 }
 
+/** Build the `word/document.xml` body from content blocks. */
 function documentXml(blocks: DocxBlock[]): string {
   let figureIndex = 0;
   const body = blocks
@@ -175,12 +207,14 @@ function documentXml(blocks: DocxBlock[]): string {
 </w:document>`;
 }
 
+/** Render a single paragraph as `<w:p>` XML with its style. */
 function paragraphXml(kind: ParaKind, text: string): string {
   const style = kindToStyle(kind);
   const pPr = style ? `<w:pPr><w:pStyle w:val="${style}"/></w:pPr>` : "";
   return `<w:p>${pPr}<w:r><w:t xml:space="preserve">${encodeXml(text)}</w:t></w:r></w:p>`;
 }
 
+/** Render a table block (optional title + bordered table + optional note) as XML. */
 function tableBlockXml(table: Extract<DocxBlock, { type: "table" }>): string {
   const header = tableRowXml(table.columns, true);
   const rows = table.rows.map((row) => tableRowXml(row, false)).join("");
@@ -202,6 +236,7 @@ function tableBlockXml(table: Extract<DocxBlock, { type: "table" }>): string {
   </w:tbl>${note}`;
 }
 
+/** Render one table row; header rows are shaded and bold. */
 function tableRowXml(cells: string[], isHeader: boolean): string {
   const fill = isHeader ? `<w:shd w:fill="EEF6EC"/>` : "";
   const bold = isHeader ? "<w:b/>" : "";
@@ -215,6 +250,7 @@ function tableRowXml(cells: string[], isHeader: boolean): string {
     .join("")}</w:tr>`;
 }
 
+/** Render a figure block (title + embedded SVG drawing + caption) as XML. */
 function figureBlockXml(figure: Extract<DocxBlock, { type: "figure" }>, index: number): string {
   const rid = `rIdFigure${index}`;
   const cx = 5_760_000;
@@ -247,6 +283,7 @@ function figureBlockXml(figure: Extract<DocxBlock, { type: "figure" }>, index: n
 ${paragraphXml("normal", figure.caption)}`;
 }
 
+/** The `[Content_Types].xml` part declaring docx/svg content types. */
 function contentTypesXml(): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
@@ -258,6 +295,7 @@ function contentTypesXml(): string {
 </Types>`;
 }
 
+/** The package-level `_rels/.rels` pointing at the main document part. */
 function packageRelsXml(): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
@@ -265,6 +303,7 @@ function packageRelsXml(): string {
 </Relationships>`;
 }
 
+/** The `word/_rels/document.xml.rels` linking styles and each figure image. */
 function documentRelsXml(figureCount = 0): string {
   const figureRels = Array.from({ length: figureCount }, (_, index) => {
     const id = index + 1;
@@ -277,6 +316,7 @@ function documentRelsXml(figureCount = 0): string {
 </Relationships>`;
 }
 
+/** The `word/styles.xml` defining Normal and Heading1–3/List styles. */
 function stylesXml(): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
@@ -315,8 +355,13 @@ function stylesXml(): string {
 }
 
 /**
- * 把整段新文本塞进段落的第一个 run，其余 run 的文字清空。
- * 段落级样式（pPr）与首个 run 的样式（rPr）得以保留。
+ * Write the full new text into a paragraph's first run and blank the rest.
+ *
+ * Paragraph style (pPr) and the first run's style (rPr) are preserved.
+ *
+ * @param block The original `<w:p>` XML.
+ * @param newText The replacement text.
+ * @returns The rewritten paragraph XML.
  */
 function replaceParagraphText(block: string, newText: string): string {
   const wtMatches = [...block.matchAll(WT_RE)];

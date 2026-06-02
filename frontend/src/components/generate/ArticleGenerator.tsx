@@ -5,11 +5,12 @@ import {
   type ResearchItemDTO,
   type TargetLength,
   type TopicOptionDTO,
-} from "../api.js";
-import { useStore } from "../store.js";
-import { Sparkle } from "./icons.js";
-import { messages } from "../i18n.js";
+} from "../../lib/api.js";
+import { useStore } from "../../lib/store.js";
+import { Sparkle } from "../common/icons.js";
+import { messages } from "../../lib/i18n.js";
 
+/** "Generate article" view: title-first or domain → topics → research → generate. */
 export default function ArticleGenerator() {
   const styles = useStore((s) => s.styles);
   const loadStyles = useStore((s) => s.loadStyles);

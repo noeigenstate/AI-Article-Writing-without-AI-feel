@@ -1,13 +1,14 @@
 import { useState } from "react";
-import { useStore } from "../store.js";
+import { useStore } from "../../lib/store.js";
 import RewritePopover from "./SentencePopover.js";
-import { fetchAlternatives, fetchTitles, type ArticleRenderBlockDTO, type ParagraphDTO } from "../api.js";
-import { messages } from "../i18n.js";
+import { fetchAlternatives, fetchTitles, type ArticleRenderBlockDTO, type ParagraphDTO } from "../../lib/api.js";
+import { messages } from "../../lib/i18n.js";
 
 type Selected =
   | { kind: "sentence"; paraIndex: number; sentenceIdx: number; sentence: string; context: string }
   | { kind: "title"; paraIndex: number; text: string };
 
+/** Renders the document/article and wires per-sentence and title rephrasing. */
 export default function DocEditor() {
   const paragraphs = useStore((s) => s.paragraphs);
   const renderBlocks = useStore((s) => s.renderBlocks);
@@ -154,6 +155,7 @@ export default function DocEditor() {
   );
 }
 
+/** Wrap a plain paragraph as a render block (used when there are no figures/tables). */
 function paragraphBlockFromParagraph(p: ParagraphDTO): ArticleRenderBlockDTO {
   return {
     type: "paragraph",
@@ -163,6 +165,7 @@ function paragraphBlockFromParagraph(p: ParagraphDTO): ArticleRenderBlockDTO {
   };
 }
 
+/** Build an editable paragraph from a render block when no stored paragraph matches. */
 function paragraphFromBlock(block: Extract<ArticleRenderBlockDTO, { type: "paragraph" }>, index: number): ParagraphDTO {
   return {
     index: block.paragraphIndex ?? -1 - index,

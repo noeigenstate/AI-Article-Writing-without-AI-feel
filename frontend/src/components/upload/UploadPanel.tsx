@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { useStore } from "../store.js";
-import { CloudUp } from "./icons.js";
-import { messages } from "../i18n.js";
+import { useStore } from "../../lib/store.js";
+import { CloudUp } from "../common/icons.js";
+import { messages } from "../../lib/i18n.js";
 
+/** "Rewrite Word" entry view: pick a docx + style/samples, then upload & parse. */
 export default function UploadPanel() {
   const doUpload = useStore((s) => s.doUpload);
   const styles = useStore((s) => s.styles);

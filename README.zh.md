@@ -4,7 +4,7 @@
 
 **让文字写得像人，也站得住。**
 
-一个开源写作工作台：把初稿里的「AI 味」去掉，并生成有证据支撑的文章 —— 支持 **中文和英文**。
+一个开源写作工作台：把初稿里的「AI 味」去掉，并给出改写前后的分数。支持 **中文和英文**。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-22a06b.svg)](LICENSE)
 ![Node](https://img.shields.io/badge/Node-%E2%89%A518-339933?logo=node.js&logoColor=white)
@@ -18,307 +18,144 @@
 
 ---
 
-Speak Plainly 能把 Word 文章改得更自然、去掉常见的 AI 腔，也能根据领域或标题一键生成文章，并自动检索 arXiv、RSS 新闻源和公开网页信息，为文章补上引用、图片、表格和证据链。界面与生成内容都可以在 **中文 / 英文** 之间切换。
+## 它解决什么
 
-它不是「再套一层提示词」的 AI 写作壳。目标是把内容生产拆成可检查的步骤：选题、资料、论点、段落、图片、表格、引用、导出，每一步都尽量留下来源和编辑入口。
+AI 写出来的稿子，一眼就能看出是 AI 写的：千篇一律的套话开头、满屏黑话、过于工整的排比——读者有感觉，审稿的人更有感觉。市面上大多数「去 AI 味」工具只想着骗过检测器。Speak Plainly 做的是更实用的事：先**量化** AI 味，再把它**改掉**，而且**直接用你手上那份 Word**。
 
-## 截图
+## 你能用它做什么
+
+- **丢一份 Word 初稿进去，拿回一份像真人写的** —— 整篇去 AI 味改写，导回 `.docx` 时保留原有排版。
+- **看到改写前后的分数，而不是凭感觉** —— 0–100 的 AI 味评分，并指出具体踩了哪些坑（套话、黑话、漏进正文的 Markdown、机械连接词、句长过于均匀）。
+- **改成「你」的口吻** —— 选内置风格，或上传自己的 `.docx` / `.txt` 范文来模仿其文风。
+- **逐句打磨** —— 点任意句子拿多个替代表达，也可以直接手改。
+- **从零写、带出处** —— 给一个标题或领域，自动检索 arXiv 论文和新闻 RSS，生成带图表、证据表格和参考文献的文章。
+- **可以完全本地、保护隐私** —— 指向本地模型（Ollama / LM Studio / vLLM），文本不出本机。评分本身永远在本地算。
+
+## 演示
+
+<div align="center">
+<img src="assets/screenshots/demo-generate.gif" alt="输入标题，一键生成带出处的全文" width="760" /><br/>
+<sub><b>从一个标题到一篇有出处的文章——检索、配图、引用，一次完成。</b></sub>
+</div>
 
 <table>
 <tr>
 <td width="50%" align="center">
-<img src="assets/screenshots/01-rewrite.png" alt="Word 去 AI 味改写" /><br/>
-<sub><b>Word 去 AI 味改写</b></sub>
+<img src="assets/screenshots/01-rewrite.png" alt="去 AI 味编辑器 + 本地评分" /><br/>
+<sub><b>去 AI 味编辑器，带本地 AI 味评分与命中痕迹明细</b></sub>
 </td>
 <td width="50%" align="center">
-<img src="assets/screenshots/02-generate.png" alt="文章生成" /><br/>
-<sub><b>带实时资料的文章生成</b></sub>
+<img src="assets/screenshots/02-generate.png" alt="输入标题或选择领域" /><br/>
+<sub><b>从标题或领域开始</b></sub>
 </td>
 </tr>
 </table>
 
-## 适合做什么
+## 为什么选它
 
-- 把 AI 初稿改成更像真人写的文章。
-- 上传 `.docx` 后按内置风格或参考范文进行整篇改写。
-- 点击单句获取多个替代表达，再手动微调。
-- 按领域自动生成选题。
-- 输入标题后，让 AI 自动判断领域并生成文章。
-- 自动聚合 arXiv、新闻 RSS、科技媒体和网页图片，作为写作素材。
-- 生成带图片、表格、参考文献和来源说明的文章。
-- 导出新的 Word 文档，继续进入人工编辑或发布流程。
+这个领域里，开源项目大多要么是**一段提示词**（粘进对话框用），要么是**过检测器**的服务。Speak Plainly 是另一种思路：
 
-## 功能亮点
+| | 提示词 / skill 仓库 | 过检测器工具 | **Speak Plainly** |
+| --- | :---: | :---: | :---: |
+| 可运行的应用 + 界面 | ✗ | ✓ | ✓ |
+| 改写前后 AI 味评分 | ✗ | 很少 | ✓（本地） |
+| Word 进 → Word 出，保留排版 | ✗ | ✗ | ✓ |
+| 从范文学**你的**风格 | 很少 | ✗ | ✓ |
+| 带研究资料的文章生成 | ✗ | ✗ | ✓ |
+| 可完全本地运行 | ✗ | ✗ | ✓ |
+| 目标 | 去味 | 骗过查重 | **像人写的，且站得住** |
 
-| 能力 | 说明 |
-| --- | --- |
-| 去 AI 味改写 | 对 Word 正文做风格化改写，减少口号式、模板式、泛泛而谈的表达。 |
-| 范文风格学习 | 可选择内置写作风格，也可上传 `.docx` / `.txt` 范文提取风格画像。 |
-| 逐句编辑 | 文章生成或改写后，点击句子即可获取候选表达，支持直接手动改。 |
-| 选题规划 | 按领域生成选题，覆盖 AI 科技、商业财经、职场成长、教育、健康、文化、社会观察、自媒体等方向。 |
-| 标题直达 | 用户只输入标题，后端调用 AI 判断领域，再走同一套研究和生成链路。 |
-| 实时资料支持 | 聚合 arXiv 与 RSS/Atom 来源，并做去重、截断、缓存和安全上下文包装。 |
-| 图表与引用 | 生成文章时输出结构化正文、来源图片、证据表格和参考文献。 |
-| Word 导出 | 改写文档保留原始结构；生成文章可导出为 `.docx`。 |
-| 中英双语 | 界面与生成内容都可在中文 / 英文之间切换。 |
-
-## 工作流
-
-```text
-输入标题或选择领域
-        ↓
-AI 判断领域 / 自动生成选题
-        ↓
-检索 arXiv、RSS、新闻与公开网页图片
-        ↓
-生成正文、图、表格、引用和参考文献
-        ↓
-Web 端结构化预览与逐句编辑
-        ↓
-导出 Word
-```
-
-Word 改写链路：
-
-```text
-上传 Word + 可选范文
-        ↓
-解析 docx 段落与标题
-        ↓
-提取风格画像
-        ↓
-整篇改写 / 单句候选 / 标题候选
-        ↓
-只替换改动段落并导出 Word
-```
-
-## 技术栈
-
-| 模块 | 技术 |
-| --- | --- |
-| 前端 | React, Vite, TypeScript, Zustand |
-| 后端 | Node.js, TypeScript, Express |
-| 文档处理 | jszip 解析与导出 `.docx` |
-| 模型接口 | OpenAI SDK 兼容接口，默认 DeepSeek |
-| 研究资料 | arXiv, RSS/Atom, 公开网页元信息 |
-| 输出结构 | 段落、图片、表格、参考文献、Word 文档 |
-
-## 项目结构
-
-```text
-speak-plainly/
-├── backend/
-│   └── src/
-│       ├── server.ts              # Express API 路由
-│       ├── prompts.ts             # 改写 / 选题 / 文章生成提示词（中英）
-│       ├── i18n.ts                # 后端语言文案
-│       ├── styles.ts              # 内置风格画像
-│       ├── services/
-│       │   ├── article.ts         # 文章生成、图表、引用和渲染块
-│       │   ├── docx.ts            # Word 解析与导出
-│       │   ├── llm.ts             # 模型调用
-│       │   ├── rewrite.ts         # 去 AI 味改写链路
-│       │   └── research/          # arXiv、RSS、图片提取、缓存、限流
-│       └── scripts/               # 本地测试脚本
-├── frontend/
-│   └── src/
-│       ├── App.tsx
-│       ├── api.ts
-│       ├── i18n.ts                # 界面文案字典（中英）
-│       ├── store.ts
-│       └── components/
-├── assets/screenshots/
-└── README.md
-```
+我们刻意不追求「100% 不可检测」，目标是一份真人编辑能放行的稿子。
 
 ## 快速开始
 
-需要 Node.js 18 或更高版本。
+需要 Node.js 18+。
 
-### 1. 配置模型 Key
-
-复制示例配置并填入自己的 Key：
+**一键启动** —— 首次运行会自动创建 `backend/.env`、安装依赖并同时启动前后端：
 
 ```bash
-cp backend/.env.example backend/.env
+./run.sh      # macOS / Linux / Windows（Git Bash）
 ```
 
-Windows PowerShell：
-
-```powershell
-Copy-Item backend/.env.example backend/.env
+```bat
+run.bat       :: Windows —— 双击，或在终端里运行
 ```
 
-`backend/.env` 内容示例：
+<details>
+<summary>或者手动分别启动两个服务</summary>
+
+```bash
+# 1. 配置模型 Key
+cp backend/.env.example backend/.env   # 然后编辑它
+
+# 2. 后端
+cd backend && npm install && npm start        # http://localhost:8787
+
+# 3. 前端（新开一个终端）
+cd frontend && npm install && npm run dev
+```
+
+</details>
+
+任何 OpenAI 兼容接口都能用（默认 DeepSeek）。用右上角 **EN / 中文** 切换界面和生成内容的语言。
+
+### 私有 / 本地模式
+
+想让文本完全不出本机？在 `backend/.env` 里指向本地服务，并关掉云端专属的推理参数：
 
 ```env
-DEEPSEEK_API_KEY=your_deepseek_api_key
-LLM_BASE_URL=https://api.deepseek.com
-LLM_MODEL=deepseek-v4-pro
-LLM_THINKING_TYPE=enabled
-LLM_REASONING_EFFORT=high
-PORT=8787
+LLM_BASE_URL=http://localhost:11434/v1   # Ollama
+LLM_API_KEY=ollama
+LLM_MODEL=qwen2.5:14b
+LLM_THINKING_TYPE=off
+LLM_REASONING_EFFORT=off
 ```
 
-也可以使用通用变量：
+AI 味评分永远在本地计算，不调用任何模型。
 
-```env
-LLM_API_KEY=your_openai_compatible_api_key
-LLM_BASE_URL=https://api.deepseek.com
-LLM_MODEL=deepseek-v4-pro
-```
-
-读取优先级：`LLM_API_KEY` 优先，其次 `DEEPSEEK_API_KEY`。
-
-不要把真实 API Key 提交到 GitHub。`.env` 已在 `.gitignore` 中忽略。
-
-### 2. 启动后端
+## 10 秒看效果
 
 ```bash
 cd backend
-npm install
-npm start
+npm run test:score              # 离线对比「AI 味样本」与「人话样本」的分数
+npm run test:score -- --rewrite # 额外调用模型改写并打印「前 → 后」
 ```
 
-默认后端地址：`http://localhost:8787`
+## 使用须知
 
-### 3. 启动前端
+- 生成质量取决于模型和实时来源，仍需人工审核——尤其是事实、财经、医疗、法律类内容。
+- 生成文章只做技术性聚合，不代表授予转载权。发布前请自行核对版权与事实。
+- 文档存于后端内存，重启即丢。公开部署需自行加鉴权、限流和持久化存储。
+
+<details>
+<summary><b>技术细节</b>（栈 / 结构 / API）</summary>
+
+**技术栈：** 前端 React + Vite + Zustand；后端 Node + Express + TypeScript；用 `jszip` 解析/导出 `.docx`；模型走任意 OpenAI 兼容接口。AI 味评分是 `backend/src/services/aiScore.ts` 里的纯启发式算法——不联网、不调模型。
+
+**结构：** 后端拆为 `core/`（配置、i18n、store）、`routes/`（每个功能一个路由，由 `app.ts` 组装）、`services/`（`rewrite`、`article`、`docx`、`aiScore`、`research/`）、`prompts/`、`data/`、共享 `lib/`。前端把状态/接口/i18n 放在 `frontend/src/lib/`，UI 按 `frontend/src/components/{editor,generate,upload,common}/` 分组。
+
+**主要 API：** `POST /api/upload` · `POST /api/rewrite`（返回改写前后评分）· `POST /api/score` · `POST /api/sentence/alternatives` · `POST /api/title` · `POST /api/article/generate` · `POST /api/export`。所有内容接口都接受 `lang`（`"en"` 或 `"zh"`）。
+
+**构建与测试：**
 
 ```bash
-cd frontend
-npm install
-npm run dev
+cd backend  && npm run build && npm run test:docx && npm run test:article && npm run test:score
+cd frontend && npm run build
 ```
 
-前端通过 Vite 代理访问后端。需要改后端地址时：
+</details>
 
-```bash
-BACKEND_URL=http://localhost:8787 npm run dev
-```
+## 路线图
 
-Windows PowerShell：
-
-```powershell
-$env:BACKEND_URL="http://localhost:8787"
-npm run dev
-```
-
-用右上角的 **EN / 中文** 开关切换语言；选择会被记住，并决定生成内容的语言。
-
-## 使用指南
-
-### 改写 Word
-
-1. 进入「改写 Word」。
-2. 上传待改写的 `.docx`。
-3. 选择内置风格，或上传参考范文。
-4. 点击上传并解析。
-5. 点击整篇润色，或在编辑器中逐句查看候选表达。
-6. 检查结果后导出 Word。
-
-### 生成文章
-
-1. 进入「生成文章」。
-2. 输入标题直接生成，或选择领域后自动生成选题。
-3. 系统会检索论文、新闻和公开网页信息。
-4. 生成文章后检查正文、图片、表格与参考文献。
-5. 在编辑器中继续逐句调整。
-6. 导出 Word。
-
-## API 一览
-
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| `GET` | `/api/health` | 检查模型服务连通性 |
-| `GET` | `/api/styles?lang=` | 获取内置写作风格 |
-| `POST` | `/api/upload` | 上传 Word 与参考范文 |
-| `POST` | `/api/rewrite` | 整篇去 AI 味改写 |
-| `POST` | `/api/title` | 基于全文生成标题候选 |
-| `POST` | `/api/sentence/alternatives` | 获取单句候选表达 |
-| `POST` | `/api/export` | 导出 Word |
-| `GET` | `/api/article/domains?lang=` | 获取文章领域 |
-| `POST` | `/api/article/topics` | 按领域生成选题 |
-| `POST` | `/api/article/generate` | 按选题生成文章 |
-| `POST` | `/api/article/generate-from-title` | 按标题自动匹配领域并生成文章 |
-| `POST` | `/api/research/preview` | 预览研究资料聚合结果 |
-
-所有内容相关接口都接受 `lang` 字段（`"en"` 或 `"zh"`），用于控制生成内容的语言。
-
-## 测试与构建
-
-后端：
-
-```bash
-cd backend
-npm run test:docx
-npm run test:article
-npm run test:research
-npm run build
-```
-
-前端：
-
-```bash
-cd frontend
-npm run build
-```
-
-模型连通性测试（需要有效 API Key）：
-
-```bash
-cd backend
-npm run test:llm
-```
-
-## 资料来源
-
-Speak Plainly 当前支持：
-
-- **arXiv**：用于获取开放论文条目和摘要。
-- **RSS/Atom**：用于获取公开新闻、科技、财经和中文内容源。
-- **公开网页元信息**：优先读取来源页面的 `og:image`、`twitter:image` 等图片信息。
-
-注意：不同媒体的 RSS、图片和转载规则不一样。项目只做技术聚合，不自动授予转载权。公开发布前需要人工确认来源、版权、事实和引用格式。
-
-## 内容质量原则
-
-生成文章时，项目提示词会尽量约束以下要求：
-
-- 不写 AI 口头禅。
-- 不用空泛过渡句堆篇幅。
-- 观点必须绑定资料、数据或明确来源。
-- 段落要有清晰推进关系。
-- 图片优先来自引用来源，并显示说明与来源。
-- 参考文献使用接近学术论文的格式。
-
-模型仍可能出错。高风险内容、事实判断、财经医疗法律内容必须人工复核。
-
-## 当前限制
-
-- 生成结果依赖模型质量和实时来源质量，需要人工复核。
-- RSS 来源可用性会变化，部分站点可能没有稳定公开 feed。
-- Word 导出会尽量保留结构，但被改写段落的段内字符级样式不能完全还原。
-- 文档当前存放在后端内存中，服务重启后会失效。
-- 公网部署前需要补鉴权、限流、持久化存储和更严格的上传文件限制。
-
-## Roadmap
-
-- 生成结果页截图与演示 GIF。
+- 编辑器内的评分明细面板（悬停某个坑 → 高亮对应句子）。
 - Docker Compose。
-- 封面图、卡片和长图导出。
-- 上传资料库，按自有资料生成文章。
-- 来源可信度评分与引用格式模板。
-- 用户级任务历史和草稿管理。
+- 个人素材库，从自己的素材生成。
+- 按用户的历史记录与草稿管理。
 
-## 贡献
+## 参与贡献
 
-欢迎提交 Issue 或 Pull Request。建议 PR 尽量小，并说明：
+欢迎 Issue 和 PR——保持小步提交，说清楚改了什么、为什么、测了什么。
 
-- 改动目标
-- 主要实现方式
-- 已执行测试
-- 可能影响的模块
+## 许可证
 
-## License
-
-本项目基于 [MIT License](LICENSE) 开源，可自由使用、修改和二次开发，仅需保留版权与许可声明。
+[MIT](LICENSE)。

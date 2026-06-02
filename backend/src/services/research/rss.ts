@@ -12,10 +12,12 @@ const parser = new XMLParser({
 
 type XmlValue = string | number | boolean | Record<string, unknown> | XmlValue[] | null | undefined;
 
+/** Type guard for plain objects (not arrays/null). */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+/** Wrap a value as an array (XML parser yields a scalar for single nodes). */
 function asArray<T>(value: T | T[] | undefined): T[] {
   if (value === undefined) {
     return [];
@@ -23,6 +25,7 @@ function asArray<T>(value: T | T[] | undefined): T[] {
   return Array.isArray(value) ? value : [value];
 }
 
+/** Coerce an XML node value to clean, whitespace-collapsed text. */
 function cleanText(value: XmlValue): string | undefined {
   if (value === null || value === undefined) {
     return undefined;
@@ -38,6 +41,7 @@ function cleanText(value: XmlValue): string | undefined {
   return text || undefined;
 }
 
+/** Resolve a feed `link` node to a URL (prefer `alternate`, then href/text). */
 function linkText(value: XmlValue): string | undefined {
   if (Array.isArray(value)) {
     const alternate = value.find((link) => isRecord(link) && link.rel === "alternate");
@@ -49,6 +53,7 @@ function linkText(value: XmlValue): string | undefined {
   return cleanText(value);
 }
 
+/** Return the first usable image URL among several candidate nodes. */
 function firstImageUrl(...values: XmlValue[]): string | undefined {
   for (const value of values) {
     const url = imageUrl(value);
@@ -59,6 +64,7 @@ function firstImageUrl(...values: XmlValue[]): string | undefined {
   return undefined;
 }
 
+/** Dig an image URL out of a feed node (string HTML, enclosure, media:*, etc.). */
 function imageUrl(value: XmlValue): string | undefined {
   if (value === null || value === undefined) {
     return undefined;
@@ -93,6 +99,7 @@ function imageUrl(value: XmlValue): string | undefined {
   return undefined;
 }
 
+/** True if the string looks like an http(s) image URL. */
 function isImageUrl(url: string | undefined): url is string {
   if (!url || !/^https?:\/\//i.test(url)) {
     return false;
@@ -100,6 +107,7 @@ function isImageUrl(url: string | undefined): url is string {
   return /\.(png|jpe?g|webp|gif)(\?|#|$)/i.test(url) || /\/image\//i.test(url);
 }
 
+/** Extract author names from a feed author node, if any. */
 function authorNames(value: XmlValue): string[] | undefined {
   const authors = asArray(value as Record<string, unknown> | string | undefined)
     .map((author) => (isRecord(author) ? cleanText(author.name as XmlValue) : cleanText(author as XmlValue)))
@@ -108,6 +116,7 @@ function authorNames(value: XmlValue): string[] | undefined {
   return authors.length > 0 ? authors : undefined;
 }
 
+/** Normalize a date string to ISO-8601, or "" if missing/unparseable. */
 function normalizeDate(value: string | undefined): string {
   if (!value) {
     return "";
@@ -121,10 +130,12 @@ function normalizeDate(value: string | undefined): string {
   return date.toISOString();
 }
 
+/** Build a stable item id from a source and URL. */
 function itemId(source: NewsSource, url: string): string {
   return `${source.id}:${url.trim().toLowerCase()}`;
 }
 
+/** Map one RSS `<item>` to a research item, or undefined if incomplete. */
 function fromRssItem(item: Record<string, unknown>, source: NewsSource): ResearchItem | undefined {
   const title = cleanText(item.title as XmlValue);
   const url = linkText(item.link as XmlValue) || cleanText(item.guid as XmlValue);
@@ -148,6 +159,7 @@ function fromRssItem(item: Record<string, unknown>, source: NewsSource): Researc
   };
 }
 
+/** Map one Atom `<entry>` to a research item, or undefined if incomplete. */
 function fromAtomEntry(entry: Record<string, unknown>, source: NewsSource): ResearchItem | undefined {
   const title = cleanText(entry.title as XmlValue);
   const url = linkText(entry.link as XmlValue) || cleanText(entry.id as XmlValue);
@@ -171,6 +183,15 @@ function fromAtomEntry(entry: Record<string, unknown>, source: NewsSource): Rese
   };
 }
 
+/**
+ * Parse an RSS or Atom feed into research items.
+ *
+ * Tries RSS `<item>`s first, then falls back to Atom `<entry>`s.
+ *
+ * @param xml The feed XML.
+ * @param source The source the feed belongs to.
+ * @returns Parsed items (entries lacking a title or URL are dropped).
+ */
 export function parseFeedXml(xml: string, source: NewsSource): ResearchItem[] {
   const parsed = parser.parse(xml) as {
     rss?: { channel?: { item?: Record<string, unknown> | Record<string, unknown>[] } };
@@ -190,6 +211,13 @@ export function parseFeedXml(xml: string, source: NewsSource): ResearchItem[] {
     .filter((item): item is ResearchItem => Boolean(item));
 }
 
+/**
+ * Fetch and parse a news/RSS source (cached 20 min).
+ *
+ * @param source The configured feed.
+ * @returns Parsed research items.
+ * @throws Error if the feed request fails.
+ */
 export function fetchNewsFeed(source: NewsSource): Promise<ResearchItem[]> {
   return cached(`rss:${source.id}:${source.url}`, 20 * 60 * 1000, async () => {
     const res = await fetchTextWithTimeout(

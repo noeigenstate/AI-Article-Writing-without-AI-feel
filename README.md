@@ -4,7 +4,7 @@
 
 **Write like a human, not a bot.**
 
-An open-source writing workbench that strips the "AI smell" out of your drafts and generates evidence-backed articles — in **English or Chinese**.
+An open-source writing workbench that strips the "AI smell" out of your drafts — and shows you the score before and after. Works in **English and Chinese**.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-22a06b.svg)](LICENSE)
 ![Node](https://img.shields.io/badge/Node-%E2%89%A518-339933?logo=node.js&logoColor=white)
@@ -18,307 +18,144 @@ English · [中文](README.zh.md)
 
 ---
 
-Speak Plainly rewrites Word documents to read more naturally, and generates full articles from a domain or a title — pulling in arXiv papers, RSS news, and public web sources to back the text with citations, images, tables, and an evidence chain. The whole UI and the generated content can switch between **English** and **Chinese**.
+## The problem
 
-It is not "yet another prompt wrapper." The goal is to break content production into checkable steps — topic, sources, claims, paragraphs, images, tables, citations, export — leaving a source and an edit handle at each step.
+AI drafts read like AI. The same boilerplate openers, the same buzzwords, the same too-neat parallel sentences — readers feel it, and so do reviewers. Most "humanizer" tools just try to slip past detectors. Speak Plainly does something more useful: it **measures** the AI smell, **rewrites** it out, and lets you **keep the Word file you already have**.
 
-## Screenshots
+## What you can do with it
+
+- **Drop in a Word draft and get it back reading like a person wrote it** — whole-document de-AI rewrite, exported straight back to `.docx` with the original layout intact.
+- **See a before/after score**, not a vibe — a 0–100 AI-smell gauge that points at the exact tells it found (boilerplate, buzzwords, leaked Markdown, robotic transitions, too-uniform sentences).
+- **Make it sound like *you*** — pick a built-in voice or upload your own `.docx`/`.txt` samples to copy their style.
+- **Fix it sentence by sentence** — click any line for alternative phrasings, or edit by hand.
+- **Write from scratch with sources** — give a title or a domain and it pulls arXiv papers and news RSS to draft an article with figures, a citation table, and references.
+- **Keep it private** — point it at a local model (Ollama / LM Studio / vLLM) and nothing leaves your machine. The score is computed locally regardless.
+
+## Demo
+
+<div align="center">
+<img src="assets/screenshots/demo-generate.gif" alt="Generating a full article from a title" width="760" /><br/>
+<sub><b>From a title to a sourced article — research, figures, and citations, in one run.</b></sub>
+</div>
 
 <table>
 <tr>
 <td width="50%" align="center">
-<img src="assets/screenshots/01-rewrite.png" alt="De-AI rewrite for Word" /><br/>
-<sub><b>De-AI rewrite for Word</b></sub>
+<img src="assets/screenshots/01-rewrite.png" alt="De-AI editor with local AI-smell score" /><br/>
+<sub><b>De-AI editor with a local AI-smell score and per-pattern breakdown</b></sub>
 </td>
 <td width="50%" align="center">
-<img src="assets/screenshots/02-generate.png" alt="Article generation" /><br/>
-<sub><b>Article generation with live sources</b></sub>
+<img src="assets/screenshots/02-generate.png" alt="Pick a domain or type a title" /><br/>
+<sub><b>Start from a title or a domain</b></sub>
 </td>
 </tr>
 </table>
 
-## What it's good for
+## Why this one, not the others
 
-- Turn an AI first draft into text that reads like a real person wrote it.
-- Upload a `.docx` and rewrite the whole thing in a built-in style or against your own samples.
-- Click any sentence to get alternative phrasings, then fine-tune by hand.
-- Auto-generate article topics by domain.
-- Type a title and let the AI pick the domain and write the piece.
-- Aggregate arXiv, news RSS, tech media, and web images as writing material.
-- Produce articles with images, tables, references, and source notes.
-- Export a fresh Word document and continue editing or publishing.
+Most open-source tools in this space are either a **single prompt** you paste into a chatbot, or a **detector-bypass** service. Speak Plainly is a different bet:
 
-## Highlights
+| | Prompt / skill repos | Detector-bypass tools | **Speak Plainly** |
+| --- | :---: | :---: | :---: |
+| Runnable app with a UI | ✗ | ✓ | ✓ |
+| Before/after AI-smell score | ✗ | rarely | ✓ (local) |
+| Word in → Word out, layout kept | ✗ | ✗ | ✓ |
+| Learns *your* style from samples | rarely | ✗ | ✓ |
+| Research-backed article generation | ✗ | ✗ | ✓ |
+| Runs fully local / private | ✗ | ✗ | ✓ |
+| Goal | humanize | beat Turnitin | **read like a human & hold up** |
 
-| Capability | What it does |
-| --- | --- |
-| De-AI rewrite | Restyles Word body text, cutting slogan-like, templated, and vague phrasing. |
-| Style learning | Pick a built-in style, or upload `.docx` / `.txt` samples to extract a style profile. |
-| Sentence-level editing | After generating or rewriting, click a sentence for alternatives or edit directly. |
-| Topic planning | Generate topics by domain — AI & tech, business, careers, education, health, culture, society, creators. |
-| Title-first flow | Enter only a title; the backend infers the domain, then runs the same research + generation chain. |
-| Live research | Aggregates arXiv and RSS/Atom sources with dedup, truncation, caching, and safe context wrapping. |
-| Figures & citations | Generated articles include structured body text, source images, an evidence table, and references. |
-| Word export | Rewrites preserve original structure; generated articles export to `.docx`. |
-| Bilingual | UI and generated content switch between English and Chinese. |
-
-## Workflow
-
-```text
-Enter a title or pick a domain
-        ↓
-AI infers domain / auto-generates topics
-        ↓
-Search arXiv, RSS, news, and public web images
-        ↓
-Generate body, figures, tables, citations, references
-        ↓
-Structured preview + sentence-level editing in the web app
-        ↓
-Export to Word
-```
-
-Word rewrite chain:
-
-```text
-Upload Word + optional samples
-        ↓
-Parse docx paragraphs and headings
-        ↓
-Extract a style profile
-        ↓
-Whole-doc rewrite / sentence alternatives / title alternatives
-        ↓
-Replace only changed paragraphs and export Word
-```
-
-## Tech stack
-
-| Layer | Tech |
-| --- | --- |
-| Frontend | React, Vite, TypeScript, Zustand |
-| Backend | Node.js, TypeScript, Express |
-| Documents | jszip for parsing and exporting `.docx` |
-| Model API | OpenAI-compatible API, DeepSeek by default |
-| Research | arXiv, RSS/Atom, public web metadata |
-| Output | Paragraphs, images, tables, references, Word document |
-
-## Project structure
-
-```text
-speak-plainly/
-├── backend/
-│   └── src/
-│       ├── server.ts              # Express API routes
-│       ├── prompts.ts             # Rewrite / topic / article prompts (EN + ZH)
-│       ├── i18n.ts                # Backend language labels
-│       ├── styles.ts              # Built-in style profiles
-│       ├── services/
-│       │   ├── article.ts         # Article generation, figures, tables, citations
-│       │   ├── docx.ts            # Word parsing and export
-│       │   ├── llm.ts             # Model calls
-│       │   ├── rewrite.ts         # De-AI rewrite chain
-│       │   └── research/          # arXiv, RSS, image extraction, cache, rate limit
-│       └── scripts/               # Local test scripts
-├── frontend/
-│   └── src/
-│       ├── App.tsx
-│       ├── api.ts
-│       ├── i18n.ts                # UI dictionary (EN + ZH)
-│       ├── store.ts
-│       └── components/
-├── assets/screenshots/
-└── README.md
-```
+We deliberately don't chase "100% undetectable." The aim is text a real editor would pass.
 
 ## Quick start
 
-Requires Node.js 18 or newer.
+Requires Node.js 18+.
 
-### 1. Configure the model key
-
-Copy the example config and fill in your key:
+**One click** — creates `backend/.env` on first run, installs dependencies, and starts both servers:
 
 ```bash
-cp backend/.env.example backend/.env
+./run.sh      # macOS / Linux / Windows (Git Bash)
 ```
 
-Windows PowerShell:
-
-```powershell
-Copy-Item backend/.env.example backend/.env
+```bat
+run.bat       :: Windows — double-click, or run in a terminal
 ```
 
-Example `backend/.env`:
+<details>
+<summary>Or start the two servers manually</summary>
+
+```bash
+# 1. configure a model key
+cp backend/.env.example backend/.env   # then edit it
+
+# 2. backend
+cd backend && npm install && npm start        # http://localhost:8787
+
+# 3. frontend (new terminal)
+cd frontend && npm install && npm run dev
+```
+
+</details>
+
+Any OpenAI-compatible endpoint works (DeepSeek is the default). Use the **EN / 中文** toggle to switch the UI and the language of generated content.
+
+### Private / local mode
+
+Want nothing to leave your machine? In `backend/.env`, point at a local server and turn off the cloud-only reasoning flags:
 
 ```env
-DEEPSEEK_API_KEY=your_deepseek_api_key
-LLM_BASE_URL=https://api.deepseek.com
-LLM_MODEL=deepseek-v4-pro
-LLM_THINKING_TYPE=enabled
-LLM_REASONING_EFFORT=high
-PORT=8787
+LLM_BASE_URL=http://localhost:11434/v1   # Ollama
+LLM_API_KEY=ollama
+LLM_MODEL=qwen2.5:14b
+LLM_THINKING_TYPE=off
+LLM_REASONING_EFFORT=off
 ```
 
-Or use the generic variables:
+The AI-smell score never calls a model — it's always local.
 
-```env
-LLM_API_KEY=your_openai_compatible_api_key
-LLM_BASE_URL=https://api.deepseek.com
-LLM_MODEL=deepseek-v4-pro
-```
-
-Precedence: `LLM_API_KEY` first, then `DEEPSEEK_API_KEY`.
-
-Do not commit real API keys. `.env` is already in `.gitignore`.
-
-### 2. Start the backend
+## Try the score in 10 seconds
 
 ```bash
 cd backend
-npm install
-npm start
+npm run test:score              # scores AI-flavored vs. human samples, offline
+npm run test:score -- --rewrite # also rewrites with your model and prints before → after
 ```
 
-Default backend address: `http://localhost:8787`
+## Good to know
 
-### 3. Start the frontend
+- Output quality tracks the model and the live sources — human review is still needed, especially for factual, financial, medical, or legal content.
+- Generated articles aggregate sources technically; they don't grant reuse rights. Check copyright and facts before publishing.
+- Documents live in backend memory and are lost on restart. A public deployment needs auth, rate limiting, and persistent storage.
+
+<details>
+<summary><b>Under the hood</b> (stack, structure, API)</summary>
+
+**Stack:** React + Vite + Zustand (frontend), Node + Express + TypeScript (backend), `jszip` for `.docx`, any OpenAI-compatible model API. The AI-smell score is a pure heuristic in `backend/src/services/aiScore.ts` — no network, no model.
+
+**Layout:** the backend is split into `core/` (config, i18n, store), `routes/` (one router per feature, assembled by `app.ts`), `services/` (`rewrite`, `article`, `docx`, `aiScore`, `research/`), `prompts/`, `data/`, and shared `lib/` helpers. The frontend keeps state/api/i18n in `frontend/src/lib/` and groups UI under `frontend/src/components/{editor,generate,upload,common}/`.
+
+**Main API:** `POST /api/upload` · `POST /api/rewrite` (returns before/after score) · `POST /api/score` · `POST /api/sentence/alternatives` · `POST /api/title` · `POST /api/article/generate` · `POST /api/export`. All content endpoints take a `lang` of `"en"` or `"zh"`.
+
+**Build & test:**
 
 ```bash
-cd frontend
-npm install
-npm run dev
+cd backend  && npm run build && npm run test:docx && npm run test:article && npm run test:score
+cd frontend && npm run build
 ```
 
-The frontend reaches the backend through a Vite proxy. To point at a different backend:
-
-```bash
-BACKEND_URL=http://localhost:8787 npm run dev
-```
-
-Windows PowerShell:
-
-```powershell
-$env:BACKEND_URL="http://localhost:8787"
-npm run dev
-```
-
-Use the **EN / 中文** toggle in the top-right to switch language; the choice is remembered and also drives the language of generated content.
-
-## Usage
-
-### Rewrite Word
-
-1. Open **Rewrite Word**.
-2. Upload the `.docx` to rewrite.
-3. Pick a built-in style or upload samples.
-4. Upload and parse.
-5. Polish the whole doc, or open the editor for sentence-level alternatives.
-6. Review, then export Word.
-
-### Generate an article
-
-1. Open **Generate article**.
-2. Enter a title directly, or pick a domain and auto-generate topics.
-3. The system searches papers, news, and public web sources.
-4. Review the body, images, tables, and references.
-5. Keep tuning sentence by sentence in the editor.
-6. Export Word.
-
-## API overview
-
-| Method | Path | Description |
-| --- | --- | --- |
-| `GET` | `/api/health` | Check model connectivity |
-| `GET` | `/api/styles?lang=` | Built-in writing styles |
-| `POST` | `/api/upload` | Upload Word + samples |
-| `POST` | `/api/rewrite` | Whole-doc de-AI rewrite |
-| `POST` | `/api/title` | Title alternatives from full text |
-| `POST` | `/api/sentence/alternatives` | Sentence alternatives |
-| `POST` | `/api/export` | Export Word |
-| `GET` | `/api/article/domains?lang=` | Article domains |
-| `POST` | `/api/article/topics` | Topics by domain |
-| `POST` | `/api/article/generate` | Article from a topic |
-| `POST` | `/api/article/generate-from-title` | Article from a title (auto domain) |
-| `POST` | `/api/research/preview` | Preview aggregated research |
-
-All content endpoints accept a `lang` field (`"en"` or `"zh"`) to control the language of generated output.
-
-## Test & build
-
-Backend:
-
-```bash
-cd backend
-npm run test:docx
-npm run test:article
-npm run test:research
-npm run build
-```
-
-Frontend:
-
-```bash
-cd frontend
-npm run build
-```
-
-Model connectivity test (needs a valid API key):
-
-```bash
-cd backend
-npm run test:llm
-```
-
-## Sources
-
-Speak Plainly currently supports:
-
-- **arXiv** — open paper entries and abstracts.
-- **RSS/Atom** — public news, tech, finance, and Chinese-language feeds.
-- **Public web metadata** — prefers `og:image` / `twitter:image` from source pages.
-
-Note: RSS, image, and reuse rules differ per outlet. The project only aggregates technically; it does not grant reuse rights. Before publishing, verify sources, copyright, facts, and citation format by hand.
-
-## Content quality principles
-
-When generating articles, the prompts push for:
-
-- No AI filler phrases.
-- No vague transitions padding length.
-- Every claim tied to data, sources, or explicit references.
-- Clear paragraph-to-paragraph progression.
-- Images preferred from cited sources, shown with caption and source.
-- Reference formatting close to academic style.
-
-The model can still be wrong. High-stakes, factual, financial, medical, and legal content must be reviewed by a human.
-
-## Limitations
-
-- Output quality depends on the model and live-source quality; human review is needed.
-- RSS availability varies; some sites lack a stable public feed.
-- Word export preserves structure, but in-paragraph character-level formatting of rewritten paragraphs may not fully round-trip.
-- Documents live in backend memory and are lost on restart.
-- A public deployment needs auth, rate limiting, persistent storage, and stricter upload limits.
+</details>
 
 ## Roadmap
 
-- Result-page screenshots and a demo GIF.
+- Score breakdown panel in the editor (hover a tell → see the sentences).
 - Docker Compose.
-- Cover images and card/long-image export.
-- Upload a personal source library and generate from it.
-- Source-credibility scoring and citation templates.
+- Personal source library and generate-from-it.
 - Per-user history and draft management.
 
 ## Contributing
 
-Issues and pull requests are welcome. Keep PRs small and describe:
-
-- The goal of the change
-- The main approach
-- Tests run
-- Modules that might be affected
+Issues and PRs welcome — keep them small and say what changed, why, and what you tested.
 
 ## License
 
-Released under the [MIT License](LICENSE) — free to use, modify, and build on, as long as the copyright and license notice are kept.
+[MIT](LICENSE).

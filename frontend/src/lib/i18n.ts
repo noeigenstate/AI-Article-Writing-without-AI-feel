@@ -1,7 +1,13 @@
+/** Supported UI languages. */
 export type Lang = "en" | "zh";
 
 const STORAGE_KEY = "speak-plainly-lang";
 
+/**
+ * Read the persisted UI language from localStorage.
+ *
+ * @returns The stored language, or "en" if none/invalid.
+ */
 export function getStoredLang(): Lang {
   if (typeof localStorage !== "undefined") {
     const v = localStorage.getItem(STORAGE_KEY);
@@ -10,10 +16,16 @@ export function getStoredLang(): Lang {
   return "en";
 }
 
+/**
+ * Persist the chosen UI language to localStorage.
+ *
+ * @param lang The language to store.
+ */
 export function storeLang(lang: Lang): void {
   if (typeof localStorage !== "undefined") localStorage.setItem(STORAGE_KEY, lang);
 }
 
+/** The full UI string dictionary; one implementation per language. */
 export interface Dict {
   tagline: string;
   langToggle: string;
@@ -71,6 +83,22 @@ export interface Dict {
   noCandidates: string;
   manualEdit: string;
   adopt: string;
+  // ai score
+  scoreTitle: string;
+  scoreBefore: string;
+  scoreAfter: string;
+  scoreDrop: (n: number) => string;
+  scoreHint: string;
+  scoreCurrent: string;
+  scoreLevelLow: string;
+  scoreLevelMedium: string;
+  scoreLevelHigh: string;
+  scoreStatsTitle: string;
+  scoreColTell: string;
+  scoreFound: (n: number) => string;
+  scoreRemoved: (n: number) => string;
+  scoreClean: string;
+  rescore: string;
   // store busy
   busyParsing: string;
   busyGenerating: string;
@@ -134,6 +162,21 @@ const en: Dict = {
   noCandidates: "No alternatives returned; edit by hand.",
   manualEdit: "Edit by hand:",
   adopt: "Use this",
+  scoreTitle: "AI-smell score",
+  scoreBefore: "Before",
+  scoreAfter: "After",
+  scoreDrop: (n) => `−${n}`,
+  scoreHint: "Scored locally — your text never leaves this machine.",
+  scoreCurrent: "Current",
+  scoreLevelLow: "Reads human",
+  scoreLevelMedium: "Some AI smell",
+  scoreLevelHigh: "Strong AI smell",
+  scoreStatsTitle: "Detected patterns",
+  scoreColTell: "Pattern",
+  scoreFound: (n) => `${n} found`,
+  scoreRemoved: (n) => `${n} removed`,
+  scoreClean: "No obvious AI tells detected.",
+  rescore: "Re-score",
   busyParsing: "Parsing document, extracting style…",
   busyGenerating: "Writing the article…",
   busyMatching: "Matching domain and writing the article…",
@@ -195,6 +238,21 @@ const zh: Dict = {
   noCandidates: "没拿到候选，可手动编辑。",
   manualEdit: "手动编辑：",
   adopt: "采用这段",
+  scoreTitle: "AI 味评分",
+  scoreBefore: "改写前",
+  scoreAfter: "改写后",
+  scoreDrop: (n) => `−${n}`,
+  scoreHint: "本地评分，文本不出本机。",
+  scoreCurrent: "当前",
+  scoreLevelLow: "读起来像人",
+  scoreLevelMedium: "略有 AI 味",
+  scoreLevelHigh: "AI 味较重",
+  scoreStatsTitle: "命中痕迹统计",
+  scoreColTell: "痕迹类型",
+  scoreFound: (n) => `${n} 处`,
+  scoreRemoved: (n) => `消除 ${n} 处`,
+  scoreClean: "未发现明显的 AI 痕迹。",
+  rescore: "重新评分",
   busyParsing: "解析文档、提取风格中…",
   busyGenerating: "正在生成文章…",
   busyMatching: "正在判断领域并生成文章…",
@@ -203,4 +261,5 @@ const zh: Dict = {
   dateLocale: "zh-CN",
 };
 
+/** UI strings keyed by language; index with the current {@link Lang}. */
 export const messages: Record<Lang, Dict> = { en, zh };

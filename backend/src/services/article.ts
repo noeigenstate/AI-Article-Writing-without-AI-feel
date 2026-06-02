@@ -1,14 +1,16 @@
 import { chat, type ChatOptions } from "./llm.js";
 import type { DocxBlock, ParaKind } from "./docx.js";
 import type { ResearchItem } from "./research/types.js";
-import { articleDraftPrompt, articleTopicsPrompt } from "../prompts.js";
+import { articleDraftPrompt, articleTopicsPrompt } from "../prompts/article.prompts.js";
+import { escapeSvg, shortDate, slug, stringField, truncate } from "../lib/text.js";
+import { parseJsonWithRepair } from "../lib/json.js";
 import {
   ARTICLE_LABELS,
   CHAIN_NODE_LABELS,
   EVIDENCE_TABLE_COLUMNS,
   tr,
   type Lang,
-} from "../i18n.js";
+} from "../core/i18n.js";
 
 export interface ArticleDomain {
   id: string;
@@ -158,6 +160,12 @@ const ARTICLE_DOMAIN_DEFS: ArticleDomainDef[] = [
 
 const CUSTOM_DOMAIN_DESC = { en: "User-defined domain", zh: "用户自定义领域" };
 
+/**
+ * List the supported article domains, localized.
+ *
+ * @param lang Target language.
+ * @returns The domains for that language.
+ */
 export function getArticleDomains(lang: Lang): ArticleDomain[] {
   return ARTICLE_DOMAIN_DEFS.map((d) => ({ id: d.id, name: d.name[lang], desc: d.desc[lang] }));
 }
@@ -165,6 +173,14 @@ export function getArticleDomains(lang: Lang): ArticleDomain[] {
 /** Backward-compatible default (English) list. Prefer getArticleDomains(lang). */
 export const ARTICLE_DOMAINS: ArticleDomain[] = getArticleDomains("en");
 
+/**
+ * Resolve a domain from an id or a custom name, falling back to the first domain.
+ *
+ * @param domainId A known domain id, if any.
+ * @param customDomain A free-text domain name, used when no id matches.
+ * @param lang Target language.
+ * @returns The resolved domain.
+ */
 export function resolveArticleDomain(domainId?: string, customDomain?: string, lang: Lang = "en"): ArticleDomain {
   const domains = getArticleDomains(lang);
   const picked = domains.find((d) => d.id === domainId);
@@ -174,6 +190,15 @@ export function resolveArticleDomain(domainId?: string, customDomain?: string, l
   return domains[0];
 }
 
+/**
+ * Infer the best-fitting domain for a user-supplied title via the model.
+ *
+ * @param title The article title.
+ * @param lang Target language.
+ * @param ask Chat function (injectable for testing).
+ * @returns The matched domain with a confidence score and reasons.
+ * @throws Error if the model returns no usable match.
+ */
 export async function matchArticleDomainFromTitle(
   title: string,
   lang: Lang = "en",
@@ -189,6 +214,15 @@ export async function matchArticleDomainFromTitle(
   throw new Error("The model did not return a usable domain match.");
 }
 
+/**
+ * Generate topic options for a domain.
+ *
+ * Accepts either a {@link GenerateTopicOptionsInput} object or the legacy
+ * `(domain, n)` positional form. The chat function is injectable for testing.
+ *
+ * @returns Up to `n` normalized topic options.
+ * @throws Error if the model returns no usable topics.
+ */
 export async function generateTopicOptions(
   input: GenerateTopicOptionsInput,
   ask?: ChatFn
@@ -232,6 +266,14 @@ export async function generateTopicOptions(
   return topics;
 }
 
+/**
+ * Generate a full article draft (title + paragraphs) from a topic.
+ *
+ * @param input Domain, topic, style, length, research context, and language.
+ * @param ask Chat function (injectable for testing).
+ * @returns The parsed article.
+ * @throws Error if the model returns no usable article JSON.
+ */
 export async function generateArticleDraft(
   input: GenerateArticleInput,
   ask: ChatFn = chat
@@ -245,12 +287,25 @@ export async function generateArticleDraft(
   return article;
 }
 
+/**
+ * Flatten an article to plain `{kind, text}` paragraphs (drops figures/tables).
+ *
+ * @param article The generated article.
+ * @returns Paragraph blocks only.
+ */
 export function articleToDocParagraphs(article: GeneratedArticle): { kind: ParaKind; text: string }[] {
   return articleToDocBlocks(article)
     .filter((block): block is Extract<DocxBlock, { type: "paragraph" }> => block.type === "paragraph")
     .map(({ kind, text }) => ({ kind, text }));
 }
 
+/**
+ * Lay out an article as ordered docx blocks: title, lead, figure, body, table, refs.
+ *
+ * @param article The generated (enriched) article.
+ * @param lang Target language for section labels.
+ * @returns Ordered docx blocks ready for {@link ./docx.ts}.
+ */
 export function articleToDocBlocks(article: GeneratedArticle, lang: Lang = "en"): DocxBlock[] {
   const blocks: DocxBlock[] = [
     { type: "paragraph", kind: "heading1", text: article.title },
@@ -287,6 +342,17 @@ export function articleToDocBlocks(article: GeneratedArticle, lang: Lang = "en")
   return blocks;
 }
 
+/**
+ * Lay out an article as render blocks for the web editor.
+ *
+ * Mirrors {@link articleToDocBlocks}, but threads each body paragraph's stored
+ * index so the editor can map sentences back to the document.
+ *
+ * @param article The generated (enriched) article.
+ * @param paragraphs Parsed paragraphs (to recover indices by text match).
+ * @param lang Target language for section labels.
+ * @returns Ordered render blocks.
+ */
 export function articleToRenderBlocks(
   article: GeneratedArticle,
   paragraphs: { index: number; text: string }[] = [],
@@ -335,6 +401,15 @@ export function articleToRenderBlocks(
   return blocks;
 }
 
+/**
+ * Attach references, an evidence table, a figure, and inline citations to an article.
+ *
+ * @param article The drafted article.
+ * @param items Research items gathered for the topic.
+ * @param accessedAt Access timestamp for the reference list.
+ * @param lang Target language.
+ * @returns A new article enriched with sourcing.
+ */
 export function enrichArticleWithResearch(
   article: GeneratedArticle,
   items: ResearchItem[],
@@ -352,6 +427,7 @@ export function enrichArticleWithResearch(
   };
 }
 
+/** Validate and normalize one raw topic object; returns null if it lacks a title. */
 function normalizeTopic(item: unknown, index: number, lang: Lang = "en"): TopicOption | null {
   if (!item || typeof item !== "object") return null;
   const obj = item as Record<string, unknown>;
@@ -374,6 +450,7 @@ function normalizeTopic(item: unknown, index: number, lang: Lang = "en"): TopicO
   };
 }
 
+/** Extract a topics array from either a bare array or a `{topics|options|items}` wrapper. */
 function topicArray(value: unknown): unknown[] | null {
   if (Array.isArray(value)) {
     return value;
@@ -392,6 +469,7 @@ function topicArray(value: unknown): unknown[] | null {
   return null;
 }
 
+/** Validate a raw article object; returns null without a title and ≥1 paragraph. */
 function normalizeArticle(item: unknown): GeneratedArticle | null {
   if (!item || typeof item !== "object") return null;
   const obj = item as Record<string, unknown>;
@@ -405,6 +483,7 @@ function normalizeArticle(item: unknown): GeneratedArticle | null {
   return { title, paragraphs };
 }
 
+/** Validate a raw domain-match object; returns null if the domainId is unknown. */
 function normalizeDomainMatch(item: unknown, lang: Lang = "en"): ArticleDomainMatch | null {
   if (!item || typeof item !== "object") return null;
   const obj = item as Record<string, unknown>;
@@ -423,6 +502,7 @@ function normalizeDomainMatch(item: unknown, lang: Lang = "en"): ArticleDomainMa
   };
 }
 
+/** Build the prompt asking the model to classify a title into one domain. */
 function domainMatchPrompt(title: string, lang: Lang = "en"): string {
   const domains = getArticleDomains(lang).map((domain) => ({
     id: domain.id,
@@ -467,6 +547,7 @@ Output strictly a JSON object:
 {"domainId":"ai-tech","confidence":88,"reasons":["reason 1","reason 2"]}`;
 }
 
+/** Ensure each paragraph ends with a `[n]` citation, cycling through available refs. */
 function enforceInlineCitations(paragraphs: string[], referenceCount: number): string[] {
   if (referenceCount === 0) {
     return paragraphs;
@@ -481,6 +562,7 @@ function enforceInlineCitations(paragraphs: string[], referenceCount: number): s
   });
 }
 
+/** Build the "key evidence" table (up to 6 rows) from research items. */
 function buildEvidenceTable(items: ResearchItem[], lang: Lang = "en"): ArticleTable {
   const rows = items.slice(0, 6).map((item, index) => [
     `[${index + 1}]`,
@@ -498,6 +580,7 @@ function buildEvidenceTable(items: ResearchItem[], lang: Lang = "en"): ArticleTa
   };
 }
 
+/** Build the lead figure: a real source image when available, else an evidence-chain diagram. */
 function buildEvidenceFigure(article: GeneratedArticle, items: ResearchItem[], lang: Lang = "en"): ArticleFigure {
   const sourceImage = items.find((item) => item.imageUrl);
   if (sourceImage?.imageUrl) {
@@ -535,19 +618,21 @@ function buildEvidenceFigure(article: GeneratedArticle, items: ResearchItem[], l
   };
 }
 
+/** Render an SVG card embedding a source image with its name and title. */
 function sourceImageSvg(item: ResearchItem): string {
   const width = 760;
   const height = 360;
   const image = item.imageUrl ? escapeSvg(item.imageUrl) : "";
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-    <rect width="${width}" height="${height}" rx="18" fill="#eef6ec"/>
+    <rect width="${width}" height="${height}" rx="18" fill="#f8fafc"/>
     <image href="${image}" x="24" y="24" width="712" height="246" preserveAspectRatio="xMidYMid slice"/>
-    <rect x="24" y="284" width="712" height="52" rx="10" fill="#fffdf8"/>
-    <text x="42" y="314" font-size="16" font-weight="700" fill="#26342b">${escapeSvg(truncate(item.sourceName, 28))}</text>
-    <text x="172" y="314" font-size="15" fill="#3d473f">${escapeSvg(truncate(item.title, 72))}</text>
+    <rect x="24" y="284" width="712" height="52" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+    <text x="42" y="314" font-size="16" font-weight="700" fill="#0f172a">${escapeSvg(truncate(item.sourceName, 28))}</text>
+    <text x="172" y="314" font-size="15" fill="#334155">${escapeSvg(truncate(item.title, 72))}</text>
   </svg>`;
 }
 
+/** Format research items into numbered, APA-ish reference strings. */
 function formatReferences(items: ResearchItem[], accessedAt: Date): ArticleReference[] {
   const accessed = accessedAt.toISOString().slice(0, 10);
   return items.map((item, index) => {
@@ -561,6 +646,7 @@ function formatReferences(items: ResearchItem[], accessedAt: Date): ArticleRefer
   });
 }
 
+/** Render the four-node "evidence chain" diagram as an SVG string. */
 function evidenceSvg(nodes: { label: string; text: string }[]): string {
   const width = 760;
   const height = 300;
@@ -571,13 +657,13 @@ function evidenceSvg(nodes: { label: string; text: string }[]): string {
       const line2 = node.text.length > 19 ? truncate(node.text.slice(19), 18) : "";
       const arrow =
         index < nodes.length - 1
-          ? `<path d="M${x + 150} 150 L${x + 172} 150" stroke="#5b6f5f" stroke-width="3" marker-end="url(#arrow)"/>`
+          ? `<path d="M${x + 150} 150 L${x + 172} 150" stroke="#94a3b8" stroke-width="3" marker-end="url(#arrow)"/>`
           : "";
       return `<g>
-        <rect x="${x}" y="84" width="150" height="132" rx="12" fill="#fffdf8" stroke="#9fb59d" stroke-width="2"/>
-        <text x="${x + 75}" y="116" text-anchor="middle" font-size="18" font-weight="700" fill="#26342b">${escapeSvg(node.label)}</text>
-        <text x="${x + 16}" y="154" font-size="14" fill="#3d473f">${escapeSvg(line1)}</text>
-        <text x="${x + 16}" y="178" font-size="14" fill="#3d473f">${escapeSvg(line2)}</text>
+        <rect x="${x}" y="84" width="150" height="132" rx="12" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+        <text x="${x + 75}" y="116" text-anchor="middle" font-size="18" font-weight="700" fill="#4f46e5">${escapeSvg(node.label)}</text>
+        <text x="${x + 16}" y="154" font-size="14" fill="#334155">${escapeSvg(line1)}</text>
+        <text x="${x + 16}" y="178" font-size="14" fill="#334155">${escapeSvg(line2)}</text>
       </g>${arrow}`;
     })
     .join("");
@@ -585,85 +671,12 @@ function evidenceSvg(nodes: { label: string; text: string }[]): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
     <defs>
       <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
-        <path d="M0,0 L0,6 L9,3 z" fill="#5b6f5f"/>
+        <path d="M0,0 L0,6 L9,3 z" fill="#94a3b8"/>
       </marker>
     </defs>
-    <rect width="${width}" height="${height}" rx="18" fill="#eef6ec"/>
-    <text x="30" y="42" font-size="22" font-weight="700" fill="#26342b">Evidence chain</text>
+    <rect width="${width}" height="${height}" rx="18" fill="#f8fafc"/>
+    <text x="30" y="42" font-size="22" font-weight="700" fill="#0f172a">Evidence chain</text>
     ${boxes}
   </svg>`;
 }
 
-function shortDate(value: string): string {
-  if (!value) {
-    return "";
-  }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value.slice(0, 10);
-  }
-  return parsed.toISOString().slice(0, 10);
-}
-
-function truncate(value: string, maxLength: number): string {
-  const text = value.replace(/\s+/g, " ").trim();
-  if (text.length <= maxLength) {
-    return text;
-  }
-  return `${text.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
-}
-
-function escapeSvg(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-function stringField(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function slug(value: string): string {
-  const cleaned = value.replace(/[^\p{Letter}\p{Number}]+/gu, "-").replace(/^-+|-+$/g, "");
-  return cleaned.slice(0, 32) || "untitled";
-}
-
-function parseJson<T>(raw: string): T {
-  let s = raw.trim();
-  const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fence) s = fence[1].trim();
-  const start = s.search(/[[{]/);
-  if (start > 0) s = s.slice(start);
-  const end = Math.max(s.lastIndexOf("]"), s.lastIndexOf("}"));
-  if (end >= 0) s = s.slice(0, end + 1);
-  return JSON.parse(s) as T;
-}
-
-async function parseJsonWithRepair<T>(raw: string, ask: ChatFn, expected: string): Promise<T> {
-  try {
-    return parseJson<T>(raw);
-  } catch {
-    const repaired = await ask(jsonRepairPrompt(raw, expected), { temperature: 0 });
-    try {
-      return parseJson<T>(repaired);
-    } catch {
-      throw new Error(`模型返回的${expected}不是有效 JSON，请重试`);
-    }
-  }
-}
-
-function jsonRepairPrompt(raw: string, expected: string): string {
-  return `下面是一段不合法的 JSON 输出。请只修复语法，保持原有信息，不要新增事实。
-目标格式：${expected}
-要求：
-1. 只输出可被 JSON.parse 直接解析的 JSON。
-2. 不要输出 Markdown、解释、注释或代码块。
-3. 如果字段值里有换行、引号或特殊字符，请正确转义。
-
-原始输出：
-"""
-${raw.slice(0, 12_000)}
-"""`;
-}
