@@ -5,6 +5,16 @@ interface CacheEntry<T> {
 
 const cache = new Map<string, CacheEntry<unknown>>();
 
+/**
+ * Memoize an async loader by key for `ttlMs`, sharing in-flight promises.
+ *
+ * A rejected load is evicted so the next call retries.
+ *
+ * @param key Cache key.
+ * @param ttlMs Time-to-live in milliseconds.
+ * @param load Loader invoked on a miss.
+ * @returns The cached or freshly loaded value.
+ */
 export function cached<T>(key: string, ttlMs: number, load: () => Promise<T>): Promise<T> {
   const now = Date.now();
   const existing = cache.get(key) as CacheEntry<T> | undefined;
@@ -30,6 +40,7 @@ export function cached<T>(key: string, ttlMs: number, load: () => Promise<T>): P
   return promise;
 }
 
+/** Clear all cached research entries (used by tests). */
 export function clearResearchCache(): void {
   cache.clear();
 }

@@ -1,5 +1,6 @@
 import type { NewsSource, NewsSourceType } from "./types.js";
 
+/** The catalog of known news/RSS sources; only `enabled` ones with a URL are used. */
 export const NEWS_SOURCES: NewsSource[] = [
   {
     id: "bbc-world",
@@ -94,10 +95,20 @@ export const NEWS_SOURCES: NewsSource[] = [
   { id: "jiemian", name: "Jiemian", type: "chinese", url: "", enabled: false },
 ];
 
+/** Return the enabled sources that have a URL. */
 export function enabledNewsSources(): NewsSource[] {
   return NEWS_SOURCES.filter((source) => source.enabled && source.url);
 }
 
+/**
+ * Pick the news sources most relevant to a domain.
+ *
+ * Matches the domain name against finance/technology/Chinese keyword sets and
+ * falls back to international + technology.
+ *
+ * @param domainName The domain name (any language).
+ * @returns The matching enabled sources.
+ */
 export function newsSourcesForDomain(domainName: string): NewsSource[] {
   const normalizedDomain = domainName.trim().toLowerCase();
   let sourceTypes: NewsSourceType[];
@@ -116,6 +127,7 @@ export function newsSourcesForDomain(domainName: string): NewsSource[] {
   return enabledNewsSources().filter((source) => typeSet.has(source.type));
 }
 
+/** True if the domain name suggests finance/business. */
 function isFinanceDomain(domainName: string): boolean {
   return [
     "bloomberg",
@@ -135,6 +147,7 @@ function isFinanceDomain(domainName: string): boolean {
   ].some((keyword) => domainName.includes(keyword));
 }
 
+/** True if the domain name suggests technology. */
 function isTechnologyDomain(domainName: string): boolean {
   return [
     "ai",
@@ -157,6 +170,7 @@ function isTechnologyDomain(domainName: string): boolean {
   ].some((keyword) => domainName.includes(keyword));
 }
 
+/** True if the domain name suggests Chinese-language coverage. */
 function isChineseDomain(domainName: string): boolean {
   return [
     ".cn",

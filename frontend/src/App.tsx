@@ -1,10 +1,12 @@
-import { useStore } from "./store.js";
-import UploadPanel from "./components/UploadPanel.js";
-import ArticleGenerator from "./components/ArticleGenerator.js";
-import DocEditor from "./components/DocEditor.js";
-import { ChatLogo, Flower, Heart } from "./components/icons.js";
-import { messages } from "./i18n.js";
+import { useStore } from "./lib/store.js";
+import UploadPanel from "./components/upload/UploadPanel.js";
+import ArticleGenerator from "./components/generate/ArticleGenerator.js";
+import DocEditor from "./components/editor/DocEditor.js";
+import ScoreBar from "./components/editor/ScoreBar.js";
+import { ChatLogo } from "./components/common/icons.js";
+import { messages } from "./lib/i18n.js";
 
+/** Root component: header, mode switch, score panel, and the active view. */
 export default function App() {
   const { lang, step, mode, busy, error, styleSummary, doRewrite, doExport, reset, setMode, setLang } =
     useStore();
@@ -12,19 +14,15 @@ export default function App() {
 
   return (
     <div className="app">
-      <div className="deco stars">
-        <span>✨</span>
-        <span className="s2">⭐</span>
-      </div>
-
       <header>
         <div className="brand">
           <span className="logo">
             <ChatLogo />
           </span>
-          <h1>Speak Plainly</h1>
-          {lang === "zh" && <span className="brand-zh">说人话</span>}
-          <span className="spark">✨</span>
+          <div className="brand-text">
+            <h1>Speak Plainly{lang === "zh" && <span className="brand-zh">说人话</span>}</h1>
+            <span className="brand-tag">{t.tagline}</span>
+          </div>
         </div>
 
         <div className="header-actions">
@@ -60,6 +58,8 @@ export default function App() {
       {error && <div className="error banner">{error}</div>}
       {busy && <div className="banner busy">{busy}</div>}
 
+      {step === "ready" && <ScoreBar />}
+
       {step === "ready" && styleSummary && (
         <details className="style-box">
           <summary>{t.styleProfile}</summary>
@@ -70,11 +70,6 @@ export default function App() {
       <main>{step === "upload" ? mode === "rewrite" ? <UploadPanel /> : <ArticleGenerator /> : <DocEditor />}</main>
 
       {step === "ready" && <footer className="hint">{t.editorHint}</footer>}
-
-      <div className="deco flower">
-        <Flower />
-      </div>
-      <Heart className="deco heart" />
     </div>
   );
 }

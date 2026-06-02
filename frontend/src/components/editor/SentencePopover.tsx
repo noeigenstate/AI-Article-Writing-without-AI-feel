@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { useStore } from "../store.js";
-import { messages } from "../i18n.js";
+import { useStore } from "../../lib/store.js";
+import { messages } from "../../lib/i18n.js";
 
 interface Props {
   heading: string;
@@ -11,6 +11,7 @@ interface Props {
   onClose: () => void;
 }
 
+/** Modal that lists alternative phrasings (or titles) and lets the user adopt/edit one. */
 export default function RewritePopover({
   heading,
   original,

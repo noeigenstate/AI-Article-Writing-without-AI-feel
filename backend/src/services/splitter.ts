@@ -19,6 +19,17 @@ const OPENERS: Record<string, string> = {
   "(": ")",
 };
 
+/**
+ * Split Chinese text into sentences without dropping any characters.
+ *
+ * Breaks after sentence-final punctuation (。！？；…), keeps trailing closing
+ * quotes/brackets with their sentence, and never splits inside quotes/brackets.
+ * The concatenation of all pieces equals the input, so edited sentences can be
+ * recombined into the original paragraph.
+ *
+ * @param text The paragraph text.
+ * @returns The sentence pieces, in order.
+ */
 export function splitSentences(text: string): string[] {
   const out: string[] = [];
   let buf = "";

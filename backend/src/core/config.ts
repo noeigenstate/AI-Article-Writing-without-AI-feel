@@ -2,6 +2,13 @@ import "dotenv/config";
 
 const baseURL = process.env.LLM_BASE_URL ?? "https://api.deepseek.com";
 
+/**
+ * Runtime configuration, resolved once from environment variables.
+ *
+ * `LLM_API_KEY` takes precedence over `DEEPSEEK_API_KEY`. The `thinkingType`
+ * and `reasoningEffort` fields are cloud-only extras; set them to "off" for
+ * local OpenAI-compatible servers (see {@link ../services/llm.ts}).
+ */
 export const config = {
   llm: {
     baseURL,

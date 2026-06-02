@@ -13,10 +13,12 @@ const parser = new XMLParser({
 
 type XmlValue = string | number | boolean | Record<string, unknown> | XmlValue[] | null | undefined;
 
+/** Type guard for plain objects (not arrays/null). */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+/** Wrap a value as an array (XML parser yields a scalar for single entries). */
 function asArray<T>(value: T | T[] | undefined): T[] {
   if (value === undefined) {
     return [];
@@ -24,6 +26,7 @@ function asArray<T>(value: T | T[] | undefined): T[] {
   return Array.isArray(value) ? value : [value];
 }
 
+/** Coerce an XML node value to clean, whitespace-collapsed text. */
 function cleanText(value: XmlValue): string | undefined {
   if (value === null || value === undefined) {
     return undefined;
@@ -39,6 +42,7 @@ function cleanText(value: XmlValue): string | undefined {
   return text || undefined;
 }
 
+/** Return the first non-empty cleaned text among the candidates. */
 function firstText(...values: XmlValue[]): string | undefined {
   for (const value of values) {
     const text = cleanText(value);
@@ -49,6 +53,7 @@ function firstText(...values: XmlValue[]): string | undefined {
   return undefined;
 }
 
+/** Resolve an entry's canonical URL (prefer the `alternate` link, else its id). */
 function entryUrl(entry: Record<string, unknown>): string | undefined {
   const links = asArray(entry.link as Record<string, unknown> | string | undefined);
   const alternate = links.find((link) => isRecord(link) && link.rel === "alternate");
@@ -57,6 +62,7 @@ function entryUrl(entry: Record<string, unknown>): string | undefined {
   return href || id;
 }
 
+/** Extract author names from an entry, if any. */
 function entryAuthors(entry: Record<string, unknown>): string[] | undefined {
   const authors = asArray(entry.author as Record<string, unknown> | string | undefined)
     .map((author) => (isRecord(author) ? cleanText(author.name as XmlValue) : cleanText(author as XmlValue)))
@@ -65,10 +71,18 @@ function entryAuthors(entry: Record<string, unknown>): string[] | undefined {
   return authors.length > 0 ? authors : undefined;
 }
 
+/** Build a stable item id from an arXiv URL. */
 function itemId(url: string): string {
   return `arxiv:${url.trim().toLowerCase()}`;
 }
 
+/**
+ * Parse an arXiv Atom feed into research items.
+ *
+ * @param xml The Atom XML.
+ * @param query The originating query (stored on each item).
+ * @returns Parsed items (entries lacking a title or URL are dropped).
+ */
 export function parseArxivAtom(xml: string, query: string): ResearchItem[] {
   const parsed = parser.parse(xml) as { feed?: { entry?: Record<string, unknown> | Record<string, unknown>[] } };
   const entries = asArray(parsed.feed?.entry);
@@ -98,6 +112,14 @@ export function parseArxivAtom(xml: string, query: string): ResearchItem[] {
     .filter((item): item is ResearchItem => Boolean(item));
 }
 
+/**
+ * Fetch recent arXiv papers for a query (cached 1h, rate-limited per arXiv policy).
+ *
+ * @param query Free-text search query.
+ * @param maxResults Desired result count (clamped to 1–10).
+ * @returns Parsed research items.
+ * @throws Error if the arXiv request fails.
+ */
 export function fetchArxivPapers(query: string, maxResults = 8): Promise<ResearchItem[]> {
   const limitedMaxResults = Math.min(10, Math.max(1, Math.trunc(maxResults)));
   const cacheKey = `arxiv:${query.trim().toLowerCase()}:${limitedMaxResults}`;

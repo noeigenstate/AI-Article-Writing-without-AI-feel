@@ -1,3 +1,7 @@
+/**
+ * Typed client for the backend API. Each function wraps one endpoint; the
+ * interfaces below are the response/request DTOs shared with the UI.
+ */
 import type { Lang } from "./i18n.js";
 
 export interface ParagraphDTO {
@@ -73,18 +77,21 @@ export interface GeneratedArticleResponseDTO {
   };
 }
 
+/** Fetch the built-in writing styles (empty array on failure). */
 export async function fetchStyles(lang: Lang) {
   const res = await fetch(`${BASE}/styles?lang=${lang}`);
   if (!res.ok) return [] as StyleDTO[];
   return (await res.json()).styles as StyleDTO[];
 }
 
+/** Fetch the available article domains (empty array on failure). */
 export async function fetchArticleDomains(lang: Lang) {
   const res = await fetch(`${BASE}/article/domains?lang=${lang}`);
   if (!res.ok) return [] as ArticleDomainDTO[];
   return (await res.json()).domains as ArticleDomainDTO[];
 }
 
+/** Preview aggregated live sources for a domain/query. */
 export async function previewResearch(domainId: string, customDomain = "", query = "", lang: Lang = "en") {
   const res = await fetch(`${BASE}/research/preview`, {
     method: "POST",
@@ -95,6 +102,7 @@ export async function previewResearch(domainId: string, customDomain = "", query
   return res.json() as Promise<ResearchBundleDTO>;
 }
 
+/** Generate topic options for a domain, with the research bundle used. */
 export async function fetchArticleTopics(domainId: string, customDomain = "", n = 6, lang: Lang = "en") {
   const res = await fetch(`${BASE}/article/topics`, {
     method: "POST",
@@ -108,6 +116,7 @@ export async function fetchArticleTopics(domainId: string, customDomain = "", n 
   }>;
 }
 
+/** Generate a full article from a chosen topic. */
 export async function generateArticle(
   domainId: string,
   customDomain: string,
@@ -125,6 +134,7 @@ export async function generateArticle(
   return res.json() as Promise<GeneratedArticleResponseDTO>;
 }
 
+/** Generate an article from a title alone (backend infers the domain). */
 export async function generateArticleFromTitle(
   title: string,
   styleId: string,
@@ -140,6 +150,7 @@ export async function generateArticleFromTitle(
   return res.json() as Promise<GeneratedArticleResponseDTO>;
 }
 
+/** Upload the target docx plus optional sample files; returns parsed structure. */
 export async function uploadFiles(target: File, references: File[], styleId = "", lang: Lang = "en") {
   const fd = new FormData();
   fd.append("file", target);
@@ -156,6 +167,14 @@ export async function uploadFiles(target: File, references: File[], styleId = ""
   }>;
 }
 
+/** An AI-smell score with its level and per-pattern breakdown. */
+export interface AiScoreDTO {
+  score: number;
+  level: "low" | "medium" | "high";
+  signals: { id: string; label: string; hits: number; points: number }[];
+}
+
+/** De-AI the whole document; returns paragraphs and before/after scores. */
 export async function rewriteDoc(docId: string, lang: Lang = "en") {
   const res = await fetch(`${BASE}/rewrite`, {
     method: "POST",
@@ -163,9 +182,21 @@ export async function rewriteDoc(docId: string, lang: Lang = "en") {
     body: JSON.stringify({ docId, lang }),
   });
   if (!res.ok) throw new Error((await res.json()).error ?? "Rewrite failed");
-  return res.json() as Promise<{ paragraphs: ParagraphDTO[] }>;
+  return res.json() as Promise<{ paragraphs: ParagraphDTO[]; score?: { before: AiScoreDTO; after: AiScoreDTO } }>;
 }
 
+/** Score text for AI smell via the local (no-model) backend endpoint. */
+export async function scoreText(text: string, lang: Lang = "en") {
+  const res = await fetch(`${BASE}/score`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, lang }),
+  });
+  if (!res.ok) throw new Error("Score failed");
+  return res.json() as Promise<AiScoreDTO>;
+}
+
+/** Fetch N title candidates for a document (empty array on failure). */
 export async function fetchTitles(docId: string, n = 3, lang: Lang = "en") {
   const res = await fetch(`${BASE}/title`, {
     method: "POST",
@@ -176,6 +207,7 @@ export async function fetchTitles(docId: string, n = 3, lang: Lang = "en") {
   return (await res.json()).titles as string[];
 }
 
+/** Fetch alternative phrasings for one sentence in its paragraph context. */
 export async function fetchAlternatives(
   docId: string,
   context: string,
@@ -192,6 +224,7 @@ export async function fetchAlternatives(
   return (await res.json()).alternatives as string[];
 }
 
+/** Export the edited document to docx and trigger a browser download. */
 export async function exportDoc(docId: string, texts: Record<number, string>) {
   const res = await fetch(`${BASE}/export`, {
     method: "POST",

@@ -4,43 +4,58 @@ import {
   rewriteDocPrompt,
   alternativesPrompt,
   rewriteTitlePrompt,
-} from "../prompts.js";
-import type { Lang } from "../i18n.js";
+} from "../prompts/rewrite.prompts.js";
+import { parseJson } from "../lib/json.js";
+import type { Lang } from "../core/i18n.js";
 
-/** 容错解析模型返回的 JSON（去掉可能的 ```json 包裹） */
-function parseJson<T>(raw: string): T {
-  let s = raw.trim();
-  const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fence) s = fence[1].trim();
-  // 截取首个 [ 或 { 到末尾对应括号
-  const start = s.search(/[[{]/);
-  if (start > 0) s = s.slice(start);
-  return JSON.parse(s) as T;
-}
-
-/** 从范文提取风格要点 */
+/**
+ * Distill a style profile from sample text.
+ *
+ * @param samples Concatenated sample excerpts.
+ * @param lang Output language.
+ * @returns The style summary, or "" when there are no samples.
+ */
 export async function extractStyleProfile(samples: string, lang: Lang = "en"): Promise<string> {
   if (!samples.trim()) return "";
   return (await chat(styleProfilePrompt(samples, lang), { temperature: 0.3 })).trim();
 }
 
+/** A single rewritten paragraph keyed by its source index. */
 export interface RewriteResult {
   index: number;
   text: string;
 }
 
-/** 整篇拼成纯文本（用于标题概括全文） */
+/**
+ * Join non-empty paragraphs into one plain-text blob (used to summarize for titles).
+ *
+ * @param paragraphs Paragraphs with text.
+ * @returns Newline-joined non-empty paragraph text.
+ */
 export function fullText(paragraphs: { text: string }[]): string {
   return paragraphs.map((p) => p.text).filter((t) => t.trim()).join("\n");
 }
 
-/** 文档标题 = 第一个非空段落的序号；无则 -1 */
+/**
+ * Find the index of the document title (the first non-empty paragraph).
+ *
+ * @param paragraphs Paragraphs with index and text.
+ * @returns The title paragraph's index, or -1 if none.
+ */
 export function titleIndexOf(paragraphs: { index: number; text: string }[]): number {
   const first = paragraphs.find((p) => p.text.trim().length > 0);
   return first ? first.index : -1;
 }
 
-/** 基于全文生成多个标题候选 */
+/**
+ * Generate N title candidates from the full article text.
+ *
+ * @param styleSummary Style profile to imitate.
+ * @param text The full article body.
+ * @param n Number of titles to request.
+ * @param lang Output language.
+ * @returns Up to `n` title strings, or [] if parsing fails.
+ */
 export async function generateTitles(
   styleSummary: string,
   text: string,
@@ -56,7 +71,19 @@ export async function generateTitles(
   }
 }
 
-/** 整篇按段改写。分块发送以控制单次长度；标题单独按"概括全文+抓注意力"改写。 */
+/**
+ * Rewrite a whole document, paragraph by paragraph.
+ *
+ * The body is sent in parallel chunks to bound request size and latency; the
+ * title is handled separately (summarize the whole piece, grab attention). On a
+ * chunk parse failure the original text is kept so the whole doc never breaks.
+ *
+ * @param styleSummary Style profile to imitate.
+ * @param paragraphs Source paragraphs (index, kind, text).
+ * @param chunkSize Paragraphs per model call (default 12).
+ * @param lang Output language.
+ * @returns A map of paragraph index → rewritten text.
+ */
 export async function rewriteDocument(
   styleSummary: string,
   paragraphs: { index: number; kind: string; text: string }[],
@@ -100,7 +127,16 @@ export async function rewriteDocument(
   return result;
 }
 
-/** 单句生成多个候选 */
+/**
+ * Generate alternative phrasings for a single sentence.
+ *
+ * @param styleSummary Style profile to imitate.
+ * @param context The paragraph the sentence appears in.
+ * @param sentence The target sentence.
+ * @param n Number of alternatives to request.
+ * @param lang Output language.
+ * @returns Up to `n` phrasings, or [] if parsing fails.
+ */
 export async function generateAlternatives(
   styleSummary: string,
   context: string,

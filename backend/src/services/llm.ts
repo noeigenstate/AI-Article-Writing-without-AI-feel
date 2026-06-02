@@ -1,17 +1,24 @@
 import OpenAI from "openai";
-import { config } from "../config.js";
+import { config } from "../core/config.js";
 
 const client = new OpenAI({
   baseURL: config.llm.baseURL,
   apiKey: config.llm.apiKey,
 });
 
+/** Options for a single chat completion. */
 export interface ChatOptions {
   system?: string;
   temperature?: number;
 }
 
-/** 一次性获取完整回复 */
+/**
+ * Send one prompt and return the full completion text.
+ *
+ * @param prompt The user prompt.
+ * @param opts Optional system prompt and temperature.
+ * @returns The model's reply, or "" if empty.
+ */
 export async function chat(prompt: string, opts: ChatOptions = {}): Promise<string> {
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
   if (opts.system) messages.push({ role: "system", content: opts.system });
@@ -27,7 +34,14 @@ export async function chat(prompt: string, opts: ChatOptions = {}): Promise<stri
   return res.choices[0]?.message?.content ?? "";
 }
 
-/** 流式获取回复，逐块回调 */
+/**
+ * Stream a completion, invoking `onDelta` for each chunk.
+ *
+ * @param prompt The user prompt.
+ * @param onDelta Called with each content delta as it arrives.
+ * @param opts Optional system prompt and temperature.
+ * @returns The full concatenated reply once the stream ends.
+ */
 export async function chatStream(
   prompt: string,
   onDelta: (chunk: string) => void,
@@ -56,7 +70,11 @@ export async function chatStream(
   return full;
 }
 
-/** 健康检查：能否连通模型 */
+/**
+ * Probe model connectivity with a trivial prompt.
+ *
+ * @returns `{ ok, model, error? }` — `ok` is false if the call throws.
+ */
 export async function health(): Promise<{ ok: boolean; model: string; error?: string }> {
   try {
     const reply = await chat("回复「ok」两个字即可。", { temperature: 0 });
@@ -66,9 +84,21 @@ export async function health(): Promise<{ ok: boolean; model: string; error?: st
   }
 }
 
+/** Values that disable an optional extra; local servers usually reject these params. */
+const OFF = new Set(["", "off", "none", "disabled", "false", "0"]);
+
+/**
+ * Build provider-specific extra params (`thinking`, `reasoning_effort`).
+ *
+ * Each is included only when configured to a non-"off" value, so the same code
+ * works against DeepSeek and against local OpenAI-compatible servers.
+ *
+ * @returns Extra request fields to spread into the completion call.
+ */
 function deepSeekOptions(): Record<string, unknown> {
   const extra: Record<string, unknown> = {};
-  if (config.llm.thinkingType) extra.thinking = { type: config.llm.thinkingType };
-  if (config.llm.reasoningEffort) extra.reasoning_effort = config.llm.reasoningEffort;
+  const { thinkingType, reasoningEffort } = config.llm;
+  if (thinkingType && !OFF.has(thinkingType.toLowerCase())) extra.thinking = { type: thinkingType };
+  if (reasoningEffort && !OFF.has(reasoningEffort.toLowerCase())) extra.reasoning_effort = reasoningEffort;
   return extra;
 }

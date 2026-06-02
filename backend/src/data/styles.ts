@@ -7,7 +7,7 @@
  * Note: a profile describes HOW to express, not WHAT to add — rewriting must not add information.
  */
 
-import type { Lang } from "./i18n.js";
+import type { Lang } from "../core/i18n.js";
 
 export interface BuiltinStyle {
   id: string;
@@ -75,6 +75,12 @@ const BUILTIN_STYLE_DEFS: BuiltinStyleDef[] = [
   },
 ];
 
+/**
+ * List the built-in style profiles, localized to the given language.
+ *
+ * @param lang Target language.
+ * @returns The available styles.
+ */
 export function getBuiltinStyles(lang: Lang): BuiltinStyle[] {
   return BUILTIN_STYLE_DEFS.map((s) => ({
     id: s.id,
@@ -84,6 +90,13 @@ export function getBuiltinStyles(lang: Lang): BuiltinStyle[] {
   }));
 }
 
+/**
+ * Look up a single built-in style by id.
+ *
+ * @param id The style id.
+ * @param lang Target language (defaults to English).
+ * @returns The style, or undefined if not found.
+ */
 export function getBuiltinStyle(id: string, lang: Lang = "en"): BuiltinStyle | undefined {
   return getBuiltinStyles(lang).find((s) => s.id === id);
 }
