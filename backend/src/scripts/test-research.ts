@@ -3,6 +3,7 @@ import { dedupeResearchItems, formatResearchContext } from "../services/research
 import { parseArxivAtom } from "../services/research/arxiv.js";
 import { extractSourceImageFromHtml } from "../services/research/images.js";
 import { parseFeedXml } from "../services/research/rss.js";
+import { newsSourcesForDomain } from "../services/research/sources.js";
 
 const arxivXml = `<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
@@ -41,6 +42,16 @@ const source = {
   url: "https://example.com/feed.xml",
   enabled: true,
 };
+
+const techSources = newsSourcesForDomain("AI & Technology");
+assert.ok(techSources.length > 0);
+assert.equal(techSources[0].type, "technology");
+assert.ok(techSources.some((s) => s.id === "techcrunch"));
+assert.ok(!techSources.some((s) => ["bbc-world", "guardian-world", "guardian-technology", "al-jazeera", "the-verge"].includes(s.id)));
+
+const worldSources = newsSourcesForDomain("world affairs");
+assert.ok(worldSources.length > 0);
+assert.equal(worldSources[0].type, "international");
 
 const papers = parseArxivAtom(arxivXml, "ai agents small teams");
 assert.equal(papers.length, 1);

@@ -77,7 +77,7 @@ export default function ScoreBar() {
 
   const before = head.before;
   const after = "after" in head ? head.after : undefined;
-  const drop = after ? before.score - after.score : 0;
+  const gain = after ? after.score - before.score : 0;
 
   const totalRemoved = after
     ? before.signals.reduce((sum, s) => {
@@ -98,7 +98,7 @@ export default function ScoreBar() {
               <Gauge s={before} label={t.scoreBefore} />
               <span className="score-arrow">→</span>
               <Gauge s={after} label={t.scoreAfter} />
-              {drop > 0 && <span className="score-drop">{t.scoreDrop(drop)}</span>}
+              {gain > 0 && <span className="score-drop">{t.scoreDrop(gain)}</span>}
             </div>
           ) : (
             <Gauge s={before} label={t.scoreCurrent} />

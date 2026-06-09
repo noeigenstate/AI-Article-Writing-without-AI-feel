@@ -1,20 +1,25 @@
 import { useEffect, useState } from "react";
+import type { CSSProperties } from "react";
 import { useStore } from "../../lib/store.js";
 import { messages } from "../../lib/i18n.js";
 
 interface Props {
   heading: string;
   original: string;
+  anchor?: FloatingAnchor;
   /** 加载候选（句子候选或标题候选） */
   loadCandidates: () => Promise<string[]>;
   onAdopt: (text: string) => void;
   onClose: () => void;
 }
 
+type FloatingAnchor = Pick<DOMRect, "left" | "top" | "bottom">;
+
 /** Modal that lists alternative phrasings (or titles) and lets the user adopt/edit one. */
 export default function RewritePopover({
   heading,
   original,
+  anchor,
   loadCandidates,
   onAdopt,
   onClose,
@@ -38,9 +43,19 @@ export default function RewritePopover({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const style = floatingStyle(anchor);
+
   return (
-    <div className="overlay" onClick={onClose}>
-      <div className="popover" onClick={(e) => e.stopPropagation()}>
+    <div className="popover-layer">
+      <div className="popover floating-popover" style={style}>
         <div className="popover-head">
           <span>{heading}</span>
           <button className="link" onClick={onClose}>
@@ -77,4 +92,22 @@ export default function RewritePopover({
       </div>
     </div>
   );
+}
+
+function floatingStyle(anchor: FloatingAnchor | undefined): CSSProperties {
+  if (!anchor || typeof window === "undefined") return {};
+
+  const margin = 16;
+  const width = Math.min(560, window.innerWidth - margin * 2);
+  const leftBase = anchor.left ?? margin;
+  const topBase = (anchor.bottom ?? anchor.top ?? margin) + 10;
+  const left = Math.max(margin, Math.min(leftBase, window.innerWidth - width - margin));
+  const top = Math.max(margin, Math.min(topBase, window.innerHeight - 240));
+
+  return {
+    position: "fixed",
+    width,
+    left,
+    top,
+  };
 }

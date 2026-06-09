@@ -14,12 +14,59 @@ import { scoreText } from "../services/aiScore.js";
 import { saveDoc, getDoc } from "../core/store.js";
 import { getBuiltinStyle } from "../data/styles.js";
 import { normalizeLang, SERVER_MESSAGES, tr } from "../core/i18n.js";
+import type { Lang } from "../core/i18n.js";
 
 /** Routes for the de-AI rewrite flow: upload, rewrite, titles, alternatives, export. */
 const router = Router();
 
 /** Multer instance keeping uploads in memory (docs are processed, not persisted). */
 const upload = multer({ storage: multer.memoryStorage() });
+
+type RewrittenParagraph = {
+  index: number;
+  kind: string;
+  original: string;
+  rewritten: string;
+  sentences: string[];
+};
+
+function paragraphResponse(
+  source: { index: number; kind: string; text: string },
+  rewritten: string
+): RewrittenParagraph {
+  return {
+    index: source.index,
+    kind: source.kind,
+    original: source.text,
+    rewritten,
+    sentences: splitSentences(rewritten),
+  };
+}
+
+function humanScoreSafeParagraphs(
+  original: { index: number; kind: string; text: string }[],
+  rewritten: RewrittenParagraph[],
+  beforeScore: ReturnType<typeof scoreText>,
+  lang: Lang
+): { paragraphs: RewrittenParagraph[]; score: ReturnType<typeof scoreText> } {
+  const originalByIndex = new Map(original.map((p) => [p.index, p]));
+  const guarded = rewritten.map((p) => {
+    const source = originalByIndex.get(p.index);
+    if (!source) return p;
+
+    const originalScore = scoreText(source.text, lang).score;
+    const rewrittenScore = scoreText(p.rewritten, lang).score;
+    return rewrittenScore >= originalScore ? p : paragraphResponse(source, source.text);
+  });
+
+  const guardedScore = scoreText(guarded.map((p) => p.rewritten).join("\n"), lang);
+  if (guardedScore.score >= beforeScore.score) {
+    return { paragraphs: guarded, score: guardedScore };
+  }
+
+  const fallback = original.map((p) => paragraphResponse(p, p.text));
+  return { paragraphs: fallback, score: beforeScore };
+}
 
 /**
  * `POST /api/upload` — accept the target docx (field `file`) plus optional samples
@@ -82,7 +129,7 @@ router.post(
   }
 );
 
-/** `POST /api/rewrite` — de-AI the whole document; also returns before/after scores. */
+/** `POST /api/rewrite` — de-AI the whole document; also returns before/after human-likeness scores. */
 router.post("/api/rewrite", async (req, res) => {
   try {
     const { docId, lang: rawLang } = req.body as { docId: string; lang?: string };
@@ -97,20 +144,20 @@ router.post("/api/rewrite", async (req, res) => {
       lang
     );
 
-    const paragraphs = rec.paragraphs.map((p) => {
+    let paragraphs = rec.paragraphs.map((p) => {
       const text = map.get(p.index) ?? p.text;
-      return {
-        index: p.index,
-        kind: p.kind,
-        original: p.text,
-        rewritten: text,
-        sentences: splitSentences(text),
-      };
+      return paragraphResponse(p, text);
     });
 
-    // 本地算改写前后的 AI 味分，给前端展示「72 → 18」的效果对照
+    // 本地算改写前后的人类感分，给前端展示「42 → 86」的效果对照。
     const before = scoreText(rec.paragraphs.map((p) => p.text).join("\n"), lang);
-    const after = scoreText(paragraphs.map((p) => p.rewritten).join("\n"), lang);
+    let after = scoreText(paragraphs.map((p) => p.rewritten).join("\n"), lang);
+
+    if (after.score < before.score) {
+      const guarded = humanScoreSafeParagraphs(rec.paragraphs, paragraphs, before, lang);
+      paragraphs = guarded.paragraphs;
+      after = guarded.score;
+    }
 
     res.json({ paragraphs, score: { before, after } });
   } catch (e) {

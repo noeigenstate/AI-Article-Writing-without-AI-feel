@@ -224,7 +224,9 @@ export function fetchNewsFeed(source: NewsSource): Promise<ResearchItem[]> {
       source.url,
       {
         headers: {
-          "User-Agent": "SpeakPlainlyResearch/0.1 (+local development)",
+          "User-Agent": "Mozilla/5.0 (compatible; SpeakPlainlyResearch/0.1; +local development)",
+          Accept: "application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.5",
+          "Accept-Language": "en-US,en;q=0.8,zh-CN;q=0.6",
         },
       },
       { label: source.name, timeoutMs: 10_000, maxBytes: 1_500_000 }

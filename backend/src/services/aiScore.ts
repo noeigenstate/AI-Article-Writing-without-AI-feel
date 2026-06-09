@@ -1,11 +1,11 @@
 /**
- * 「AI 味」评分 —— 纯本地、零模型调用的启发式打分。
- * Local, deterministic "AI smell" score. No LLM call, no network — your text never leaves the machine.
+ * 「人类感」评分 —— 纯本地、零模型调用的启发式打分。
+ * Local, deterministic human-likeness score. No LLM call, no network — your text never leaves the machine.
  *
- * 输出 0–100：越高越像 AI 写的。附带命中明细，方便前端展示「为什么扣分」。
- * Returns 0–100 (higher = more AI-flavored) plus a breakdown of which tells were hit.
+ * 输出 0–100：越高越像人类文章。附带 AI 痕迹扣分明细，方便前端展示「为什么扣分」。
+ * Returns 0–100 (higher = more human-like) plus a deduction breakdown of AI tells.
  *
- * 它衡量「读起来像不像 AI」，不是「能不能骗过检测器」——我们刻意不做后者。
+ * 它衡量「读起来像不像真人文章」，不是「能不能骗过检测器」——我们刻意不做后者。
  */
 
 import type { Lang } from "../core/i18n.js";
@@ -18,7 +18,7 @@ export interface ScoreSignal {
 }
 
 export interface AiScore {
-  score: number; // 0–100，越高越「AI」
+  score: number; // 0–100，越高越像人类文章
   level: "low" | "medium" | "high";
   signals: ScoreSignal[]; // 仅返回命中的项，按扣分降序
 }
@@ -58,8 +58,56 @@ const ZH_PHRASES: PhraseGroup[] = [
   {
     id: "buzz",
     label: "营销黑话",
-    phrases: ["赋能", "新范式", "深度融合", "未来可期", "持续发力", "生态闭环", "降本增效", "底层逻辑", "护城河", "强强联合"],
+    phrases: [
+      "赋能",
+      "新范式",
+      "深度融合",
+      "未来可期",
+      "持续发力",
+      "生态闭环",
+      "降本增效",
+      "底层逻辑",
+      "护城河",
+      "强强联合",
+      "颗粒度",
+      "抓手",
+      "打法",
+      "心智",
+      "势能",
+      "链路",
+      "闭环",
+      "方法论",
+    ],
     scale: 55,
+    max: 18,
+  },
+  {
+    id: "model-catchphrase",
+    label: "模型腔口头禅",
+    phrases: [
+      "稳稳拖住",
+      "先接住",
+      "接住",
+      "更狠一点",
+      "更猛一点",
+      "直接拉满",
+      "一把梭",
+      "给到",
+      "打透",
+      "说白了",
+      "翻译成人话",
+      "这事儿",
+      "这波",
+      "狠狠",
+      "拿捏",
+      "破防",
+      "杀疯了",
+      "封神",
+      "天花板",
+      "闭眼入",
+      "不允许还有人不知道",
+    ],
+    scale: 70,
     max: 18,
   },
   {
@@ -97,7 +145,29 @@ const EN_PHRASES: PhraseGroup[] = [
   {
     id: "buzz",
     label: "AI buzzwords",
-    phrases: ["leverage", "empower", "seamless", "game-changer", "cutting-edge", "delve into", "tapestry", "testament to", "navigate the", "in the realm of", "ever-evolving"],
+    phrases: [
+      "leverage",
+      "empower",
+      "seamless",
+      "game-changer",
+      "cutting-edge",
+      "delve into",
+      "delve",
+      "tapestry",
+      "testament to",
+      "navigate the",
+      "in the realm of",
+      "ever-evolving",
+      "underscore",
+      "pivotal",
+      "robust",
+      "holistic",
+      "nuanced",
+      "unlock",
+      "transformative",
+      "foster",
+      "elevate",
+    ],
     scale: 55,
     max: 20,
   },
@@ -146,6 +216,15 @@ const MARKDOWN: RegexGroup = {
   patterns: [/^#{1,6}\s/gm, /\*\*[^*\n]+\*\*/g, /^\s*[-*]\s+/gm, /^\s*>\s/gm, /`[^`\n]+`/g],
   scale: 40,
   max: 20,
+};
+
+const SCORE_FORMULA = {
+  zhUnitChars: 120,
+  enUnitWords: 100,
+  shortZhChars: 40,
+  shortEnWords: 25,
+  shortTextConfidence: 0.65,
+  thresholds: { high: 70, medium: 40 },
 };
 
 /**
@@ -214,6 +293,52 @@ function regexGroupScore(group: RegexGroup, text: string, units: number): ScoreS
   return { id: group.id, label: group.label, hits, points };
 }
 
+function repetitionSignal(text: string, lang: Lang, units: number): ScoreSignal {
+  const stop = new Set([
+    "the",
+    "and",
+    "for",
+    "with",
+    "that",
+    "this",
+    "from",
+    "have",
+    "has",
+    "will",
+    "一个",
+    "我们",
+    "他们",
+    "这些",
+    "那些",
+    "可以",
+    "因为",
+    "但是",
+  ]);
+  const tokens =
+    lang === "zh"
+      ? Array.from(text.matchAll(/[\u4e00-\u9fff]{2,4}/g), (m) => m[0])
+      : (text.toLowerCase().match(/[a-z][a-z-]{3,}/g) ?? []);
+  const counts = new Map<string, number>();
+  for (const token of tokens) {
+    if (stop.has(token)) continue;
+    counts.set(token, (counts.get(token) ?? 0) + 1);
+  }
+  const repeated = [...counts.values()].reduce((sum, count) => sum + Math.max(0, count - 2), 0);
+  const points = Math.min(10, (repeated / units) * 3.5);
+  return { id: "repetition", label: lang === "zh" ? "词语重复偏多" : "Repeated wording", hits: repeated, points };
+}
+
+function concretenessSignal(text: string, lang: Lang, units: number): ScoreSignal {
+  const anchors =
+    (text.match(/\d+(?:[.,]\d+)?%?/g) ?? []).length +
+    (text.match(/[《"][^《》"]{2,}[》"]/g) ?? []).length +
+    (text.match(/\[[0-9]+\]/g) ?? []).length +
+    (lang === "en" ? (text.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\b/g) ?? []).length : 0);
+  const density = anchors / units;
+  const points = Math.min(8, Math.max(0, (0.45 - density) / 0.45) * 8);
+  return { id: "concreteness", label: lang === "zh" ? "具体锚点不足" : "Few concrete anchors", hits: anchors, points };
+}
+
 /**
  * Penalize overly uniform sentence lengths (humans vary more; low CV is an AI tell).
  *
@@ -235,11 +360,12 @@ function uniformitySignal(sentences: string[], lang: Lang): ScoreSignal {
 }
 
 /**
- * Score text for "AI smell" on a 0–100 scale (higher = more AI-flavored).
+ * Score text for human-likeness on a 0–100 scale (higher = more human-like).
  *
- * Fully local and deterministic: matches language-specific tells (boilerplate,
- * buzzwords, mechanical connectives, leaked Markdown, parallelism, uniform
- * sentence length), normalizes by length, caps each category, and sums.
+ * Fully local and deterministic: matches language-specific AI tells
+ * (boilerplate, buzzwords, mechanical connectives, leaked Markdown,
+ * parallelism, uniform sentence length), normalizes by length, caps each
+ * category, and converts the AI-tell penalty into a human-likeness score.
  *
  * @param text The text to score.
  * @param lang Language selecting the pattern sets.
@@ -249,7 +375,7 @@ export function scoreText(text: string, lang: Lang): AiScore {
   const clean = (text ?? "").trim();
   const sentences = splitForScoring(clean);
   const len = lang === "zh" ? Array.from(clean).length : clean.split(/\s+/).filter(Boolean).length;
-  const units = Math.max(1, len / (lang === "zh" ? 120 : 100));
+  const units = Math.max(1, len / (lang === "zh" ? SCORE_FORMULA.zhUnitChars : SCORE_FORMULA.enUnitWords));
 
   const groups = lang === "zh" ? ZH_PHRASES : EN_PHRASES;
   const parallel = lang === "zh" ? PARALLEL_ZH : PARALLEL_EN;
@@ -259,11 +385,16 @@ export function scoreText(text: string, lang: Lang): AiScore {
     regexGroupScore(parallel, clean, units),
     regexGroupScore(MARKDOWN, clean, units),
     uniformitySignal(sentences, lang),
+    repetitionSignal(clean, lang, units),
+    concretenessSignal(clean, lang, units),
   ];
 
-  const raw = signals.reduce((a, s) => a + s.points, 0);
-  const score = Math.round(Math.max(0, Math.min(100, raw)));
-  const level: AiScore["level"] = score >= 60 ? "high" : score >= 30 ? "medium" : "low";
+  const penalty = Math.max(0, Math.min(100, signals.reduce((a, s) => a + s.points, 0)));
+  const enoughText = len >= (lang === "zh" ? SCORE_FORMULA.shortZhChars : SCORE_FORMULA.shortEnWords);
+  const lengthConfidence = len === 0 ? 0 : enoughText ? 1 : SCORE_FORMULA.shortTextConfidence;
+  const score = Math.round(Math.max(0, Math.min(100, (100 - penalty) * lengthConfidence)));
+  const level: AiScore["level"] =
+    score >= SCORE_FORMULA.thresholds.high ? "high" : score >= SCORE_FORMULA.thresholds.medium ? "medium" : "low";
 
   const shown = signals
     .filter((s) => s.points >= 0.5)

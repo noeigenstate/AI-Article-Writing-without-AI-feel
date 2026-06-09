@@ -83,11 +83,15 @@ export const useStore = create<State>((set, get) => ({
   currentScore: null,
 
   async recomputeScore() {
-    const { paragraphs, lang } = get();
+    const { paragraphs, lang, aiScore } = get();
     const text = paragraphs.map((p) => p.sentences.join("")).join("\n");
-    if (!text.trim()) return set({ currentScore: null });
+    if (!text.trim()) return set({ aiScore: null, currentScore: null });
     try {
-      set({ currentScore: await scoreText(text, lang) });
+      const nextScore = await scoreText(text, lang);
+      set({
+        aiScore: aiScore ? { before: aiScore.before, after: nextScore } : null,
+        currentScore: nextScore,
+      });
     } catch {
       /* 评分失败不阻塞 */
     }
@@ -191,7 +195,7 @@ export const useStore = create<State>((set, get) => ({
       const r = await rewriteDoc(docId, get().lang);
       set({
         paragraphs: r.paragraphs,
-        renderBlocks: null,
+        renderBlocks: get().renderBlocks,
         aiScore: r.score ?? null,
         currentScore: r.score?.after ?? get().currentScore,
         busy: null,

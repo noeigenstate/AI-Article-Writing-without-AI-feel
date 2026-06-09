@@ -167,7 +167,7 @@ export async function uploadFiles(target: File, references: File[], styleId = ""
   }>;
 }
 
-/** An AI-smell score with its level and per-pattern breakdown. */
+/** A human-likeness score with its level and AI-tell deduction breakdown. */
 export interface AiScoreDTO {
   score: number;
   level: "low" | "medium" | "high";
@@ -185,7 +185,7 @@ export async function rewriteDoc(docId: string, lang: Lang = "en") {
   return res.json() as Promise<{ paragraphs: ParagraphDTO[]; score?: { before: AiScoreDTO; after: AiScoreDTO } }>;
 }
 
-/** Score text for AI smell via the local (no-model) backend endpoint. */
+/** Score text for human-likeness via the local (no-model) backend endpoint. */
 export async function scoreText(text: string, lang: Lang = "en") {
   const res = await fetch(`${BASE}/score`, {
     method: "POST",
