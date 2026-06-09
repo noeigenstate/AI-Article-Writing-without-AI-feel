@@ -8,6 +8,7 @@ import {
 } from "../../lib/api.js";
 import { useStore } from "../../lib/store.js";
 import { Sparkle } from "../common/icons.js";
+import LiquidGlass from "../common/LiquidGlass.js";
 import { messages } from "../../lib/i18n.js";
 
 /** "Generate article" view: title-first or domain → topics → research → generate. */
@@ -123,7 +124,7 @@ export default function ArticleGenerator() {
 
   return (
     <div className="generator">
-      <div className="step lavender">
+      <LiquidGlass className="step lavender" radius={26} displacement={34}>
         <div className="step-head">
           <span className="badge lavender">1</span>
           <h2>{t.genStep1}</h2>
@@ -190,9 +191,9 @@ export default function ArticleGenerator() {
             placeholder={t.customDomainPlaceholder}
           />
         )}
-      </div>
+      </LiquidGlass>
 
-      <div className="step mint">
+      <LiquidGlass className="step mint" radius={26} displacement={30}>
         <div className="step-head">
           <span className="badge mint">2</span>
           <h2>{t.genStep2}</h2>
@@ -283,7 +284,7 @@ export default function ArticleGenerator() {
             </article>
           ))}
         </div>
-      </div>
+      </LiquidGlass>
     </div>
   );
 }
