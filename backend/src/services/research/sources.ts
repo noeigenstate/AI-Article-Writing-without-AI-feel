@@ -3,38 +3,31 @@ import type { NewsSource, NewsSourceType } from "./types.js";
 /** The catalog of known news/RSS sources; only `enabled` ones with a URL are used. */
 export const NEWS_SOURCES: NewsSource[] = [
   {
-    id: "bbc-world",
-    name: "BBC World",
+    id: "npr-world",
+    name: "NPR World",
     type: "international",
-    url: "https://feeds.bbci.co.uk/news/world/rss.xml",
+    url: "https://feeds.npr.org/1004/rss.xml",
     enabled: true,
   },
   {
-    id: "guardian-world",
-    name: "Guardian World",
+    id: "france24",
+    name: "France 24",
     type: "international",
-    url: "https://www.theguardian.com/world/rss",
+    url: "https://www.france24.com/en/rss",
     enabled: true,
   },
   {
-    id: "guardian-technology",
-    name: "Guardian Technology",
-    type: "technology",
-    url: "https://www.theguardian.com/technology/rss",
-    enabled: true,
-  },
-  {
-    id: "al-jazeera",
-    name: "Al Jazeera",
+    id: "cnbc-world",
+    name: "CNBC World",
     type: "international",
-    url: "https://www.aljazeera.com/xml/rss/all.xml",
+    url: "https://www.cnbc.com/id/100727362/device/rss/rss.html",
     enabled: true,
   },
   {
-    id: "the-verge",
-    name: "The Verge",
-    type: "technology",
-    url: "https://www.theverge.com/rss/index.xml",
+    id: "un-news",
+    name: "UN News",
+    type: "international",
+    url: "https://news.un.org/feed/subscribe/en/news/all/rss.xml",
     enabled: true,
   },
   {
@@ -52,10 +45,31 @@ export const NEWS_SOURCES: NewsSource[] = [
     enabled: true,
   },
   {
+    id: "wired",
+    name: "Wired",
+    type: "technology",
+    url: "https://www.wired.com/feed/rss",
+    enabled: true,
+  },
+  {
+    id: "mit-technology-review",
+    name: "MIT Technology Review",
+    type: "technology",
+    url: "https://www.technologyreview.com/feed/",
+    enabled: true,
+  },
+  {
+    id: "engadget",
+    name: "Engadget",
+    type: "technology",
+    url: "https://www.engadget.com/rss.xml",
+    enabled: true,
+  },
+  {
     id: "hacker-news",
     name: "Hacker News",
     type: "technology",
-    url: "https://news.ycombinator.com/rss",
+    url: "https://hnrss.org/frontpage",
     enabled: true,
   },
   {
@@ -88,6 +102,11 @@ export const NEWS_SOURCES: NewsSource[] = [
   },
   { id: "reuters", name: "Reuters", type: "international", url: "", enabled: false },
   { id: "ap", name: "AP", type: "international", url: "", enabled: false },
+  { id: "bbc-world", name: "BBC World", type: "international", url: "https://feeds.bbci.co.uk/news/world/rss.xml", enabled: false },
+  { id: "guardian-world", name: "Guardian World", type: "international", url: "https://www.theguardian.com/world/rss", enabled: false },
+  { id: "guardian-technology", name: "Guardian Technology", type: "technology", url: "https://www.theguardian.com/technology/rss", enabled: false },
+  { id: "al-jazeera", name: "Al Jazeera", type: "international", url: "https://www.aljazeera.com/xml/rss/all.xml", enabled: false },
+  { id: "the-verge", name: "The Verge", type: "technology", url: "https://www.theverge.com/rss/index.xml", enabled: false },
   { id: "yahoo-finance", name: "Yahoo Finance", type: "finance", url: "", enabled: false },
   { id: "cctv", name: "CCTV", type: "chinese", url: "", enabled: false },
   { id: "the-paper", name: "The Paper", type: "chinese", url: "", enabled: false },
@@ -123,8 +142,8 @@ export function newsSourcesForDomain(domainName: string): NewsSource[] {
     sourceTypes = ["international", "technology"];
   }
 
-  const typeSet = new Set(sourceTypes);
-  return enabledNewsSources().filter((source) => typeSet.has(source.type));
+  const enabled = enabledNewsSources();
+  return sourceTypes.flatMap((type) => enabled.filter((source) => source.type === type));
 }
 
 /** True if the domain name suggests finance/business. */
@@ -149,8 +168,11 @@ function isFinanceDomain(domainName: string): boolean {
 
 /** True if the domain name suggests technology. */
 function isTechnologyDomain(domainName: string): boolean {
+  if (/(^|[^a-z0-9])ai([^a-z0-9]|$)/i.test(domainName)) {
+    return true;
+  }
+
   return [
-    "ai",
     "anthropic",
     "arstechnica",
     "github",

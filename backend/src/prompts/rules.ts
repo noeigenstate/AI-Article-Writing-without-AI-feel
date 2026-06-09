@@ -17,6 +17,14 @@ export const ANTI_AI_RULES_ZH = `你在帮中文作者去除文章里的"AI 味"
 本模型（MiMo）实测出的高频口头禅，尤其要避开：
 - 句首连接词"此外""总之""当然"——能不用就不用，需要承接时换更自然的说法或直接去掉。
 - 泛化套路句式"……是一种……""关键/重点在于……""这种……""我们……"——尽量改成具体主语和动词。
+- 中文模型腔和自媒体腔："稳稳拖住""接住""更狠一点""直接拉满""一把梭""给到""打透""这波""狠狠""拿捏""破防""杀疯了""封神""天花板""闭眼入"。除非原文就是口语评论，否则全部改成朴素、具体、可验证的表达。
+
+内容创作者工作流要求：
+- Humanizer-zh：先删 AI 腔，再补人类细节，不要只替换同义词。
+- dbskill：标题和导语要有判断，不要只做泛泛概括。
+- content-research-writer：保留来源、数字、人名、时间，不要编造证据。
+- NotebookLM-style：基于已有材料写，减少胡编和空泛表达。
+- illustration/social-card skills：正文需要画面感时，用具体场景和对象，而不是抽象口号。
 
 格式硬规则：只输出纯文本。禁止任何 Markdown 标记（## 标题、** 加粗、- / * 列表、> 引用、\`代码\` 等），这些符号会原样出现在 Word 文档里。
 
@@ -35,6 +43,7 @@ export const ANTI_AI_RULES_EN = `You help writers strip the "AI smell" out of th
 Phrases to avoid especially:
 - Sentence-initial connectives like "Moreover", "In summary", "Of course" — drop them when possible, or use a more natural link.
 - Generic frames like "... is a kind of ...", "The key/point is ...", "This sort of ...", "We ..." — prefer concrete subjects and verbs.
+- Common GPT-ish diction such as "delve", "tapestry", "nuanced", "robust", "holistic", "pivotal", "unlock", "transformative", "foster", and "elevate" should be replaced with plainer, more specific wording unless the source text truly needs that register.
 
 Hard formatting rule: output plain text only. No Markdown whatsoever (## headings, ** bold, - / * lists, > quotes, \`code\`); those symbols would show up literally in the Word document.
 

@@ -10,8 +10,7 @@ import { messages } from "./lib/i18n.js";
 
 /** Root component: header, mode switch, score panel, and the active view. */
 export default function App() {
-  const { lang, step, mode, busy, error, styleSummary, doRewrite, doExport, reset, setMode, setLang } =
-    useStore();
+  const { lang, step, mode, busy, error, styleSummary, reset, setMode, setLang } = useStore();
   const t = messages[lang];
 
   return (
@@ -48,10 +47,6 @@ export default function App() {
 
             {step === "ready" && (
               <div className="toolbar">
-                <button className="primary" onClick={doRewrite}>
-                  {t.polishAll}
-                </button>
-                <button onClick={doExport}>{t.exportWord}</button>
                 <button className="ghost" onClick={reset}>
                   {t.restart}
                 </button>

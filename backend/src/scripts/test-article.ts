@@ -11,6 +11,7 @@ import {
   generateTopicOptions,
   matchArticleDomainFromTitle,
 } from "../services/article.js";
+import { articleDraftPrompt } from "../prompts/article.prompts.js";
 
 const docx = await createDocxFromParagraphs([
   { kind: "heading1", text: "这是一篇公众号文章标题" },
@@ -30,6 +31,15 @@ assert.equal(reparsed.paragraphs[1].text, "第一段正文，保留自然语气�
 assert.equal(reparsed.paragraphs[2].text, "第二段改成新的表达。");
 
 const domain = ARTICLE_DOMAINS[0];
+const lengthPromptBase = {
+  domainName: domain.name,
+  topic: { id: "length", title: "AI agents for small teams", angle: "cost and workflow", audience: "founders", keywords: ["AI"] },
+  lang: "zh" as const,
+};
+assert.ok(articleDraftPrompt({ ...lengthPromptBase, targetLength: "short" }).includes("约 500 字"));
+assert.ok(articleDraftPrompt({ ...lengthPromptBase, targetLength: "medium" }).includes("不少于 1000 字"));
+assert.ok(articleDraftPrompt({ ...lengthPromptBase, targetLength: "long" }).includes("3000 字以上"));
+
 let topicPrompt = "";
 const topicResearchTitle = "Useful AI Agents for Small Teams";
 const topics = await generateTopicOptions(
@@ -193,12 +203,54 @@ const enriched = enrichArticleWithResearch(
       query: "technology",
     },
   ],
-  new Date("2026-06-01T00:00:00.000Z")
+  new Date("2026-06-01T00:00:00.000Z"),
+  "zh"
 );
 assert.ok(enriched.paragraphs[0].includes("[1]"));
 assert.equal(enriched.references?.length, 2);
 assert.ok(enriched.references?.[0].text.includes("Ada Chen, Ben Rao"));
 assert.equal(enriched.figure?.imageUrl, "https://example.com/chart.jpg");
+
+const matchedImageArticle = enrichArticleWithResearch(
+  {
+    title: "Climate Teams Track River Flood Risk",
+    paragraphs: [
+      "Cities are using river sensors and flood models to plan emergency routes.",
+      "The most useful charts compare rainfall, river level, and evacuation time.",
+    ],
+  },
+  [
+    {
+      id: "news:wrong-image",
+      sourceKind: "news",
+      sourceName: "Example Markets",
+      sourceId: "example-markets",
+      title: "Chip Stocks Rise After Earnings",
+      summary: "Semiconductor shares moved higher after quarterly guidance.",
+      url: "https://example.com/chips",
+      imageUrl: "https://example.com/chip.jpg",
+      publishedAt: "2026-01-05T10:00:00.000Z",
+      authors: [],
+      query: "markets",
+    },
+    {
+      id: "news:right-image",
+      sourceKind: "news",
+      sourceName: "Example Climate",
+      sourceId: "example-climate",
+      title: "River Flood Models Help Cities Prepare",
+      summary: "Rainfall sensors and flood forecasts guide emergency planning.",
+      url: "https://example.com/flood",
+      imageUrl: "https://example.com/flood.jpg",
+      publishedAt: "2026-01-05T10:00:00.000Z",
+      authors: [],
+      query: "climate",
+    },
+  ],
+  new Date("2026-06-01T00:00:00.000Z"),
+  "en"
+);
+assert.equal(matchedImageArticle.figure?.imageUrl, "https://example.com/flood.jpg");
 
 const richBlocks = articleToDocBlocks(enriched);
 assert.ok(richBlocks.some((block) => block.type === "figure"));
@@ -209,7 +261,7 @@ assert.ok(richZip.file("word/media/figure1.svg"));
 const richXml = await richZip.file("word/document.xml")?.async("string");
 assert.ok(richXml?.includes("<w:tbl>"));
 const richParsed = await parseDocx(richDocx);
-assert.ok(richParsed.paragraphs.some((p) => p.text === "参考文献"));
+assert.ok(richParsed.paragraphs.some((p) => p.text === "References"));
 assert.ok(richParsed.paragraphs.some((p) => p.text.includes("表1 主要证据与出处")));
 
 const renderBlocks = articleToRenderBlocks(enriched, richParsed.paragraphs);

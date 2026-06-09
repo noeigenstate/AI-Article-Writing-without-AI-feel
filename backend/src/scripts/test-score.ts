@@ -1,10 +1,11 @@
 /**
- * 实际效果测试：AI 味评分 + 改写前后对照。
- * Real-effect test for the AI-smell score and the de-AI rewrite.
+ * 实际效果测试：人类感评分 + 改写前后对照。
+ * Real-effect test for the human-likeness score and the de-AI rewrite.
  *
  *   npm run test:score          只跑本地评分（无需 API Key，离线即可）
  *   npm run test:score -- --rewrite   额外调用模型改写，打印「前 → 后」分数（需有效 Key）
  */
+import assert from "node:assert/strict";
 import { scoreText, type AiScore } from "../services/aiScore.js";
 import { rewriteDocument } from "../services/rewrite.js";
 import { splitSentences } from "../services/splitter.js";
@@ -36,10 +37,13 @@ function bar(score: number): string {
 
 function printScore(label: string, s: AiScore) {
   console.log(`  ${label}: ${bar(s.score)} ${s.score}/100  [${s.level}]`);
-  for (const sig of s.signals) console.log(`      · ${sig.label} ×${sig.hits}  (+${sig.points})`);
+  for (const sig of s.signals) console.log(`      · ${sig.label} ×${sig.hits}  (-${sig.points})`);
 }
 
 const doRewrite = process.argv.includes("--rewrite");
+
+const catchphraseScore = scoreText("这波先稳稳拖住用户情绪，再接住需求，最后更狠一点直接拉满转化。", "zh");
+assert.ok(catchphraseScore.signals.some((signal) => signal.id === "model-catchphrase" && signal.hits >= 4));
 
 for (const sample of SAMPLES) {
   console.log(`\n=== ${sample.title} ===`);
@@ -58,8 +62,8 @@ if (doRewrite) {
       const rewritten = paras.map((p) => map.get(p.index) ?? p.text).join("");
       const after = scoreText(rewritten, sample.lang);
       printScore("after ", after);
-      const drop = before.score - after.score;
-      console.log(`  Δ 降低 ${drop} 分（${before.score} → ${after.score}）`);
+      const gain = after.score - before.score;
+      console.log(`  Δ 提升 ${gain} 分（${before.score} → ${after.score}）`);
       console.log(`  ── 改写后正文 ──\n  ${rewritten.replace(/\n/g, "\n  ")}`);
     } catch (e) {
       console.error(`  ✗ 改写失败（检查 API Key / base_url）：${(e as Error).message}`);

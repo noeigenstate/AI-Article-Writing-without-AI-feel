@@ -2,7 +2,7 @@ import { Router } from "express";
 import { scoreText } from "../services/aiScore.js";
 import { normalizeLang } from "../core/i18n.js";
 
-/** Routes for the local AI-smell score. */
+/** Routes for the local human-likeness score. */
 const router = Router();
 
 /**

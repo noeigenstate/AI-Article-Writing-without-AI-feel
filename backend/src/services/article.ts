@@ -582,7 +582,7 @@ function buildEvidenceTable(items: ResearchItem[], lang: Lang = "en"): ArticleTa
 
 /** Build the lead figure: a real source image when available, else an evidence-chain diagram. */
 function buildEvidenceFigure(article: GeneratedArticle, items: ResearchItem[], lang: Lang = "en"): ArticleFigure {
-  const sourceImage = items.find((item) => item.imageUrl);
+  const sourceImage = selectBestSourceImage(article, items);
   if (sourceImage?.imageUrl) {
     const caption =
       lang === "zh"
@@ -616,6 +616,64 @@ function buildEvidenceFigure(article: GeneratedArticle, items: ResearchItem[], l
     caption: tr(ARTICLE_LABELS.figureChainCaption, lang),
     svg: evidenceSvg(nodes),
   };
+}
+
+function selectBestSourceImage(article: GeneratedArticle, items: ResearchItem[]): ResearchItem | undefined {
+  const candidates = items.filter((item) => item.imageUrl);
+  if (candidates.length === 0) {
+    return undefined;
+  }
+
+  const articleText = [article.title, ...article.paragraphs.slice(0, 3)].join(" ");
+  const articleTokens = tokenizeForImageMatch(articleText);
+  let best: { item: ResearchItem; score: number } | undefined;
+
+  for (const item of candidates) {
+    const sourceText = [item.title, item.summary, item.sourceName].join(" ");
+    const sourceTokens = tokenizeForImageMatch(sourceText);
+    const overlap = [...sourceTokens].filter((token) => articleTokens.has(token)).length;
+    const titleOverlap = [...tokenizeForImageMatch(item.title)].filter((token) => articleTokens.has(token)).length;
+    const score = overlap + titleOverlap * 2 + (item.sourceKind === "news" ? 0.3 : 0);
+    if (!best || score > best.score) {
+      best = { item, score };
+    }
+  }
+
+  return best?.item ?? candidates[0];
+}
+
+function tokenizeForImageMatch(text: string): Set<string> {
+  const normalized = text.toLowerCase();
+  const words = normalized.match(/[a-z0-9][a-z0-9-]{2,}|[\u4e00-\u9fff]{2,}/g) ?? [];
+  const stop = new Set([
+    "the",
+    "and",
+    "for",
+    "with",
+    "from",
+    "that",
+    "this",
+    "are",
+    "was",
+    "were",
+    "will",
+    "about",
+    "into",
+    "after",
+    "before",
+    "如何",
+    "一个",
+    "我们",
+    "他们",
+    "这些",
+    "那些",
+    "可以",
+    "正在",
+    "已经",
+    "因为",
+    "但是",
+  ]);
+  return new Set(words.filter((word) => !stop.has(word)));
 }
 
 /** Render an SVG card embedding a source image with its name and title. */
@@ -679,4 +737,3 @@ function evidenceSvg(nodes: { label: string; text: string }[]): string {
     ${boxes}
   </svg>`;
 }
-
