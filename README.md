@@ -22,7 +22,7 @@ Open-source AI writing workbench for **Word rewriting**, **human-likeness scorin
 <div align="center">
   <img src="assets/screenshots/demo-generate.gif" alt="Speak Plainly interface demo" width="820" />
   <br />
-  <sub>Liquid-glass UI, Word rewriting, and article generation in one workspace.</sub>
+  <sub>Classical scholar-desk UI, Word rewriting, progress logs, and source-backed article generation in one workspace.</sub>
 </div>
 
 | Rewrite Word | Generate Articles |
@@ -35,7 +35,8 @@ Open-source AI writing workbench for **Word rewriting**, **human-likeness scorin
 - **Score how human the text feels** with a local 0-100 human-likeness score.
 - **Click any sentence** to get alternatives or edit it by hand.
 - **Learn your style** from uploaded `.docx` or `.txt` samples.
-- **Generate an article from a title or domain** with arXiv papers and RSS news sources.
+- **Show progress while the model works** for article writing, whole-document rewriting, title options, and topic generation.
+- **Generate an article from a title or domain** with arXiv papers, RSS news sources, and optional Agent-Reach / Exa web search.
 - **Run privately** with any OpenAI-compatible endpoint, including local model servers.
 
 ## Basic Environment
@@ -51,6 +52,8 @@ You need:
 | `.docx` files | Required for Word rewrite mode |
 
 Optional but useful: Git Bash on Windows if you want to run `./run.sh`.
+
+Optional for broader live research: [Agent-Reach](https://github.com/Panniantong/Agent-Reach) with a working `mcporter` command and Exa backend. Social sources such as Reddit and X/Twitter are not enabled by default because they usually need logged-in cookies or separate CLI setup.
 
 ## Quick Start
 
@@ -68,6 +71,16 @@ run.bat
 
 The script checks basic dependencies, prepares `backend/.env` on first run, installs packages, clears the same service port before starting, and opens one frontend/backend session.
 
+Stop the services:
+
+```bash
+./stop.sh
+```
+
+```bat
+stop.bat
+```
+
 Manual start:
 
 ```bash
@@ -84,7 +97,13 @@ npm run dev
 ```
 
 Backend: `http://localhost:8787`  
-Frontend: Vite will print the local URL, normally `http://localhost:51773`
+Frontend: Vite will print the local URL, normally `http://localhost:5173`
+
+## Interface
+
+The current UI uses a contemporary Chinese scholar-desk direction: xuan-paper background, ink-line structure, cinnabar primary actions, celadon status highlights, and a seal-style brand mark. The goal is a focused writing workspace rather than a marketing page or decorative skin.
+
+Long-running actions never leave the user waiting without feedback. The frontend shows a progress panel with percentage, current phase, and recent log-style steps for article generation, topic/title generation, and whole-document rewriting.
 
 ## Human-Likeness Score
 
@@ -123,9 +142,11 @@ The rewrite prompt also applies a creator workflow: humanize the prose first, ke
 
 ## Live Sources
 
-Article generation can collect live context from arXiv and RSS feeds. Slow or blocked feeds are recorded as unavailable instead of breaking the whole article.
+Article generation can collect live context from arXiv, RSS feeds, and optional Agent-Reach / Exa web search. Slow, blocked, or missing sources are recorded as unavailable instead of breaking the whole article.
 
 Current enabled RSS sources include NPR World, France 24, CNBC World, UN News, TechCrunch, Ars Technica, Wired, MIT Technology Review, Engadget, Hacker News via HNRSS, CNBC Top News, MarketWatch, and 36Kr.
+
+The Agent-Reach integration currently uses its Exa/mcporter search path as a broad web source. Reddit, X/Twitter, Xiaohongshu, and similar logged-in social channels require credentials/cookies and are intentionally not switched on automatically.
 
 ## Private Local Mode
 
@@ -151,6 +172,7 @@ npm run test:score
 ```bash
 cd frontend
 npm run build
+npm run test:progress
 ```
 
 ## Project Map
@@ -164,6 +186,7 @@ backend/
 frontend/
   src/components/  upload, generate, editor, common UI
   src/lib/         API client, store, i18n
+  src/workbench.css  classical scholar-desk interface layer
 
 assets/screenshots/  README screenshots and GIF
 docs/                design notes and background image

@@ -23,6 +23,7 @@ export default function DocEditor() {
   const setParagraph = useStore((s) => s.setParagraph);
   const doRewrite = useStore((s) => s.doRewrite);
   const doExport = useStore((s) => s.doExport);
+  const busy = useStore((s) => s.busy);
   const [sel, setSel] = useState<Selected | null>(null);
 
   const currentByIndex = new Map(paragraphs.map((p) => [p.index, p]));
@@ -156,12 +157,13 @@ export default function DocEditor() {
   }
 
   function DocumentActions() {
+    const isBusy = Boolean(busy);
     return (
       <div className="doc-actions" aria-label={lang === "zh" ? "文档操作" : "Document actions"}>
-        <button className="primary doc-action-primary" onClick={doRewrite}>
+        <button className="primary doc-action-primary" disabled={isBusy} onClick={doRewrite}>
           {t.polishAll}
         </button>
-        <button className="doc-action-secondary" onClick={doExport}>
+        <button className="doc-action-secondary" disabled={isBusy} onClick={doExport}>
           {t.exportWord}
         </button>
       </div>
@@ -209,6 +211,7 @@ export default function DocEditor() {
           original={sel.text}
           anchor={sel.anchor}
           loadCandidates={() => fetchTitles(docId, 3, lang)}
+          progressTask="titleCandidates"
           onAdopt={(text) => {
             setParagraph(sel.paraIndex, text);
             setSel(null);

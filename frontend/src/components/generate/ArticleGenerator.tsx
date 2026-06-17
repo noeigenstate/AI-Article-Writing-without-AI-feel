@@ -9,6 +9,7 @@ import {
 import { useStore } from "../../lib/store.js";
 import { Sparkle } from "../common/icons.js";
 import LiquidGlass from "../common/LiquidGlass.js";
+import ProgressBanner from "../common/ProgressBanner.js";
 import { messages } from "../../lib/i18n.js";
 
 /** "Generate article" view: title-first or domain → topics → research → generate. */
@@ -35,6 +36,7 @@ export default function ArticleGenerator() {
   const [targetLength, setTargetLength] = useState<TargetLength>("medium");
   const [topics, setTopics] = useState<TopicOptionDTO[]>([]);
   const [topicBusy, setTopicBusy] = useState(false);
+  const [topicProgress, setTopicProgress] = useState<{ task: "articleTopics"; startedAt: number } | null>(null);
   const [topicError, setTopicError] = useState<string | null>(null);
   const [researchBusy, setResearchBusy] = useState(false);
   const [researchError, setResearchError] = useState<string | null>(null);
@@ -56,6 +58,7 @@ export default function ArticleGenerator() {
 
   async function loadTopics() {
     setTopicBusy(true);
+    setTopicProgress({ task: "articleTopics", startedAt: Date.now() });
     setTopicError(null);
     setResearchError(null);
     try {
@@ -66,6 +69,7 @@ export default function ArticleGenerator() {
       setTopicError((e as Error).message);
     } finally {
       setTopicBusy(false);
+      setTopicProgress(null);
     }
   }
 
@@ -89,6 +93,7 @@ export default function ArticleGenerator() {
     setTopicError(null);
     setResearchError(null);
     setGeneratingTopicId(null);
+    setTopicProgress(null);
   }
 
   async function generate(topic: TopicOptionDTO) {
@@ -187,6 +192,7 @@ export default function ArticleGenerator() {
               setTopicError(null);
               setResearchError(null);
               setGeneratingTopicId(null);
+              setTopicProgress(null);
             }}
             placeholder={t.customDomainPlaceholder}
           />
@@ -233,6 +239,7 @@ export default function ArticleGenerator() {
         </div>
         {topicError && <div className="error topic-error">{topicError}</div>}
         {researchError && <div className="error topic-error">{researchError}</div>}
+        {topicProgress && <ProgressBanner busy={t.generating} progress={topicProgress} lang={lang} />}
         {selectedDomain && !topics.length && !topicBusy && (
           <p className="hint pick-desc">{t.currentDomain(selectedDomain.name)}</p>
         )}

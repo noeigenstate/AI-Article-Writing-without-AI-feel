@@ -191,6 +191,95 @@ button.link:hover { color: var(--accent-dark); text-decoration: underline; backg
 .error.banner { background: var(--bad-soft); border-color: #fecdca; }
 .hint { color: var(--muted); font-size: 13.5px; }
 
+.progress-banner {
+  display: grid;
+  gap: 8px;
+}
+
+.progress-topline,
+.progress-step {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.progress-topline span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.progress-topline strong {
+  flex: none;
+  color: var(--accent-dark);
+  font-variant-numeric: tabular-nums;
+}
+
+.progress-track {
+  position: relative;
+  height: 9px;
+  overflow: hidden;
+  border-radius: var(--r-pill);
+  background: rgba(79, 70, 229, 0.12);
+}
+
+.progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #4f46e5, #12b76a);
+  transition: width 0.55s ease;
+}
+
+.progress-step {
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+
+.progress-log {
+  display: grid;
+  gap: 5px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.progress-log-item {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  color: rgba(52, 64, 84, 0.62);
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+
+.progress-log-item.done {
+  color: rgba(22, 163, 74, 0.86);
+}
+
+.progress-log-item.active {
+  color: var(--accent-dark);
+  font-weight: 700;
+}
+
+.progress-log-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--r-pill);
+  background: rgba(102, 112, 133, 0.32);
+}
+
+.progress-log-item.done .progress-log-dot {
+  background: #16a34a;
+}
+
+.progress-log-item.active .progress-log-dot {
+  background: var(--accent);
+  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.12);
+}
+
 /* ===== Human-likeness score panel + stats ===== */
 .score-panel {
   margin: 18px 0;

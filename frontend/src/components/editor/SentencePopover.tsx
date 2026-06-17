@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import { useStore } from "../../lib/store.js";
 import { messages } from "../../lib/i18n.js";
+import type { ProgressTask } from "../../lib/progress.js";
+import ProgressBanner from "../common/ProgressBanner.js";
 
 interface Props {
   heading: string;
@@ -9,6 +11,7 @@ interface Props {
   anchor?: FloatingAnchor;
   /** 加载候选（句子候选或标题候选） */
   loadCandidates: () => Promise<string[]>;
+  progressTask?: ProgressTask;
   onAdopt: (text: string) => void;
   onClose: () => void;
 }
@@ -21,6 +24,7 @@ export default function RewritePopover({
   original,
   anchor,
   loadCandidates,
+  progressTask,
   onAdopt,
   onClose,
 }: Props) {
@@ -30,6 +34,7 @@ export default function RewritePopover({
   const [alts, setAlts] = useState<string[]>([]);
   const [edit, setEdit] = useState(original);
   const [err, setErr] = useState<string | null>(null);
+  const [progressStartedAt] = useState(() => Date.now());
 
   useEffect(() => {
     let alive = true;
@@ -66,7 +71,16 @@ export default function RewritePopover({
         <div className="orig">{t.originalLabel}{original}</div>
 
         <div className="alts">
-          {loading && <div className="hint">{t.loadingCandidates}</div>}
+          {loading &&
+            (progressTask ? (
+              <ProgressBanner
+                busy={t.loadingCandidates}
+                lang={lang}
+                progress={{ task: progressTask, startedAt: progressStartedAt }}
+              />
+            ) : (
+              <div className="hint">{t.loadingCandidates}</div>
+            ))}
           {err && <div className="error">{err}</div>}
           {!loading &&
             !err &&

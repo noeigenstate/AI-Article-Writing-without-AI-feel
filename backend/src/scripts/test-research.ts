@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { dedupeResearchItems, formatResearchContext } from "../services/research/aggregate.js";
+import { parseAgentReachSearchOutput } from "../services/research/agentReach.js";
 import { parseArxivAtom } from "../services/research/arxiv.js";
 import { extractSourceImageFromHtml } from "../services/research/images.js";
 import { parseFeedXml } from "../services/research/rss.js";
@@ -92,6 +93,35 @@ const unsafeContext = formatResearchContext([
 assert.ok(!unsafeContext.includes("<script>"));
 assert.ok(!unsafeContext.includes("<b>"));
 assert.ok(unsafeContext.length < 1600);
+
+const agentReachOutput = JSON.stringify({
+  content: [
+    {
+      type: "text",
+      text: JSON.stringify({
+        results: [
+          {
+            title: "Agentic browsers expand field research",
+            url: "https://example.com/agentic-browser-research",
+            text: "Browser-enabled agents can collect social and web evidence for writing workflows.",
+            publishedDate: "2026-01-06T09:00:00.000Z",
+            author: "Riley Stone",
+          },
+        ],
+      }),
+    },
+  ],
+});
+const agentReachItems = parseAgentReachSearchOutput(agentReachOutput, "agentic browser research");
+assert.equal(agentReachItems.length, 1);
+assert.equal(agentReachItems[0].sourceKind, "news");
+assert.equal(agentReachItems[0].sourceName, "Agent-Reach / Exa");
+assert.equal(agentReachItems[0].sourceId, "agent-reach-exa");
+assert.equal(agentReachItems[0].title, "Agentic browsers expand field research");
+assert.equal(agentReachItems[0].authors[0], "Riley Stone");
+assert.ok(agentReachItems[0].summary.includes("Browser-enabled agents"));
+
+assert.deepEqual(parseAgentReachSearchOutput("not json", "agentic browser research"), []);
 
 const sourceImage = extractSourceImageFromHtml(
   `<html><head><meta property="og:image" content="/images/story.png"></head></html>`,

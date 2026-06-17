@@ -57,7 +57,7 @@ pids+=("$!")
 
 echo
 echo "Speak Plainly is starting. Open the frontend URL shown above in your browser."
-echo "Press Ctrl+C to stop both servers."
+echo "Press Ctrl+C or run ./stop.sh from another shell to stop both servers."
 
 # Exit (and trigger cleanup) as soon as either server stops.
 wait -n

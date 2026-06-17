@@ -105,6 +105,12 @@ export interface Dict {
   busyMatching: string;
   busyRewriting: string;
   busyExporting: string;
+  progressArticleSteps: string[];
+  progressArticleFromTitleSteps: string[];
+  progressArticleTopicSteps: string[];
+  progressRewriteSteps: string[];
+  progressTitleCandidateSteps: string[];
+  progressPercent: (n: number) => string;
   // locale for dates
   dateLocale: string;
 }
@@ -182,6 +188,39 @@ const en: Dict = {
   busyMatching: "Matching domain and writing the article…",
   busyRewriting: "Rewriting the whole doc (de-AI), hold on…",
   busyExporting: "Building the Word file…",
+  progressArticleSteps: [
+    "Collecting live sources",
+    "Drafting the article",
+    "Adding citations and evidence",
+    "Building the editable document",
+    "Still working; keeping the request open",
+  ],
+  progressArticleFromTitleSteps: [
+    "Matching the best domain",
+    "Collecting live sources",
+    "Drafting the article",
+    "Adding citations and evidence",
+    "Building the editable document",
+  ],
+  progressArticleTopicSteps: [
+    "Collecting source context",
+    "Finding workable angles",
+    "Drafting candidate titles",
+    "Preparing choices",
+  ],
+  progressRewriteSteps: [
+    "Reading the document structure",
+    "Polishing paragraphs",
+    "Checking human-likeness score",
+    "Preparing the edited document",
+  ],
+  progressTitleCandidateSteps: [
+    "Reading the article context",
+    "Drafting title options",
+    "Checking tone and length",
+    "Preparing title choices",
+  ],
+  progressPercent: (n) => `${n}%`,
   dateLocale: "en-US",
 };
 
@@ -258,6 +297,39 @@ const zh: Dict = {
   busyMatching: "正在判断领域并生成文章…",
   busyRewriting: "整篇改写中（去 AI 味），稍候…",
   busyExporting: "生成 Word 中…",
+  progressArticleSteps: [
+    "正在收集前沿资料",
+    "正在撰写正文",
+    "正在补充引用和证据",
+    "正在生成可编辑文档",
+    "仍在处理，请保持当前页面",
+  ],
+  progressArticleFromTitleSteps: [
+    "正在匹配最合适的领域",
+    "正在收集前沿资料",
+    "正在撰写正文",
+    "正在补充引用和证据",
+    "正在生成可编辑文档",
+  ],
+  progressArticleTopicSteps: [
+    "正在收集资料上下文",
+    "正在寻找可写角度",
+    "正在生成候选标题",
+    "正在整理候选项",
+  ],
+  progressRewriteSteps: [
+    "正在读取文档结构",
+    "正在逐段润色",
+    "正在检查人味评分",
+    "正在准备改写结果",
+  ],
+  progressTitleCandidateSteps: [
+    "正在读取全文上下文",
+    "正在生成标题候选",
+    "正在检查语气和长度",
+    "正在整理标题选项",
+  ],
+  progressPercent: (n) => `${n}%`,
   dateLocale: "zh-CN",
 };
 

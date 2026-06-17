@@ -42,5 +42,5 @@ echo Starting frontend (dev server URL is shown in its window)
 start "Speak Plainly - frontend" /D "%~dp0frontend" cmd /k npm run dev
 
 echo.
-echo Two windows opened (backend + frontend). Close them to stop the servers.
+echo Two windows opened (backend + frontend). Close them or run stop.bat to stop the servers.
 endlocal
