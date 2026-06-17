@@ -22,7 +22,7 @@
 <div align="center">
   <img src="assets/screenshots/demo-generate.gif" alt="Speak Plainly 页面演示" width="820" />
   <br />
-  <sub>玻璃质感界面，Word 改写和文章生成都在同一个工作台里。</sub>
+  <sub>中国古典文房书案风格界面，Word 改写、进度日志和带来源文章生成都在同一个工作台里。</sub>
 </div>
 
 | 改写 Word | 生成文章 |
@@ -35,7 +35,8 @@
 - **给文字打“人类感评分”**，0-100 分，越高越像真人文章。
 - **逐句修改**：点任意句子，选择替代表达，或者手动改。
 - **学习你的口吻**：上传 `.docx` 或 `.txt` 范文，让输出更像你的风格。
-- **按标题或领域生成文章**：自动查 arXiv 论文和新闻 RSS，带资料、图表和引用。
+- **显示模型工作进度**：生成文章、整篇润色、标题候选、选题生成都会显示百分比、当前阶段和日志。
+- **按标题或领域生成文章**：自动查 arXiv 论文、新闻 RSS，并可选接入 Agent-Reach / Exa 全网搜索，带资料、图表和引用。
 - **可以本地私有运行**：支持 Ollama、LM Studio、vLLM 等 OpenAI 兼容接口。
 
 ## 基础环境
@@ -51,6 +52,8 @@
 | `.docx` 文件 | Word 改写模式需要 |
 
 Windows 用户如果想运行 `./run.sh`，建议装 Git Bash。也可以直接用 `run.bat`。
+
+如果想让文章资料来源更广，可以额外安装 [Agent-Reach](https://github.com/Panniantong/Agent-Reach)，并确保 `mcporter` 命令和 Exa 后端可用。Reddit、X/Twitter 等社交来源通常需要登录态或 cookies，目前不会默认自动启用。
 
 ## 快速启动
 
@@ -68,6 +71,16 @@ run.bat
 
 启动脚本会检查基础依赖，首次运行会准备 `backend/.env`，安装依赖，并在启动前清理同一个服务端口，避免后台旧进程占用端口。
 
+停止服务：
+
+```bash
+./stop.sh
+```
+
+```bat
+stop.bat
+```
+
 手动启动：
 
 ```bash
@@ -84,7 +97,13 @@ npm run dev
 ```
 
 后端：`http://localhost:8787`  
-前端：Vite 会打印本地地址，通常是 `http://localhost:51773`
+前端：Vite 会打印本地地址，通常是 `http://localhost:5173`
+
+## 界面风格
+
+当前界面采用当代中文文房书案方向：宣纸底、墨线结构、朱砂主操作、青瓷状态高亮和印章式品牌标识。目标是一个适合长期写作和润色的工作台，而不是营销页或简单国风皮肤。
+
+所有长耗时动作都会有明确反馈。前端会为文章生成、选题/标题生成和整篇润色显示进度面板，包括百分比、当前阶段和最近日志，避免用户空等。
 
 ## 人类感评分怎么算
 
@@ -123,9 +142,11 @@ npm run dev
 
 ## 实时资料来源
 
-生成文章时，后端会尝试从 arXiv 和 RSS 源收集资料。某个来源慢或超时，不会让整篇文章失败，只会记录为“暂不可用”。
+生成文章时，后端会尝试从 arXiv、RSS 源和可选的 Agent-Reach / Exa 全网搜索收集资料。某个来源慢、超时或未配置，不会让整篇文章失败，只会记录为“暂不可用”。
 
 当前启用的 RSS 源包括 NPR World、France 24、CNBC World、UN News、TechCrunch、Ars Technica、Wired、MIT Technology Review、Engadget、Hacker News via HNRSS、CNBC Top News、MarketWatch 和 36Kr。
+
+目前 Agent-Reach 集成的是 Exa/mcporter 搜索路径，用作宽泛网页资料来源。Reddit、X/Twitter、小红书等需要登录态的社交来源，需要单独配置凭证/cookies，因此不会默认开启。
 
 ## 本地私有模式
 
@@ -151,6 +172,7 @@ npm run test:score
 ```bash
 cd frontend
 npm run build
+npm run test:progress
 ```
 
 ## 项目结构
@@ -164,6 +186,7 @@ backend/
 frontend/
   src/components/  上传、生成、编辑器、通用组件
   src/lib/         API、状态、国际化文案
+  src/workbench.css  中国古典文房书案界面层
 
 assets/screenshots/  README 截图和 GIF
 docs/                设计资料和背景图

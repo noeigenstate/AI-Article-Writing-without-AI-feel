@@ -1,3 +1,4 @@
+import { fetchAgentReachSearch } from "./agentReach.js";
 import { fetchArxivPapers } from "./arxiv.js";
 import { fetchNewsFeed } from "./rss.js";
 import { newsSourcesForDomain } from "./sources.js";
@@ -94,6 +95,11 @@ export async function collectResearch(domainName: string, query: string): Promis
     return [] as ResearchItem[];
   });
 
+  const agentReachPromise = fetchAgentReachSearch(query, 6).catch((error: unknown) => {
+    unavailableSources.push(`Agent-Reach / Exa: ${errorMessage(error)}`);
+    return [] as ResearchItem[];
+  });
+
   const newsPromises = newsSources.map((source) =>
     fetchNewsFeed(source).catch((error: unknown) => {
       unavailableSources.push(`${source.name}: ${errorMessage(error)}`);
@@ -101,8 +107,8 @@ export async function collectResearch(domainName: string, query: string): Promis
     })
   );
 
-  const groups = await Promise.all([arxivPromise, ...newsPromises]);
-  const items = dedupeResearchItems(groups.flat()).slice(0, 20);
+  const groups = await Promise.all([arxivPromise, agentReachPromise, ...newsPromises]);
+  const items = dedupeResearchItems(groups.flat()).slice(0, 24);
 
   return {
     query,

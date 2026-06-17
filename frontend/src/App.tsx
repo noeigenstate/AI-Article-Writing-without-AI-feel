@@ -5,12 +5,13 @@ import DocEditor from "./components/editor/DocEditor.js";
 import ScoreBar from "./components/editor/ScoreBar.js";
 import { ChatLogo } from "./components/common/icons.js";
 import LiquidGlass from "./components/common/LiquidGlass.js";
+import ProgressBanner from "./components/common/ProgressBanner.js";
 import RainLayer from "./components/common/RainLayer.js";
 import { messages } from "./lib/i18n.js";
 
 /** Root component: header, mode switch, score panel, and the active view. */
 export default function App() {
-  const { lang, step, mode, busy, error, styleSummary, reset, setMode, setLang } = useStore();
+  const { lang, step, mode, busy, progress, error, styleSummary, reset, setMode, setLang } = useStore();
   const t = messages[lang];
 
   return (
@@ -60,7 +61,11 @@ export default function App() {
         </header>
 
         {error && <div className="error banner">{error}</div>}
-        {busy && <div className="banner busy">{busy}</div>}
+        {busy && progress ? (
+          <ProgressBanner busy={busy} progress={progress} lang={lang} />
+        ) : (
+          busy && <div className="banner busy">{busy}</div>
+        )}
 
         {step === "ready" && <ScoreBar />}
 

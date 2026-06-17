@@ -18,6 +18,7 @@ import {
   type TopicOptionDTO,
 } from "./api.js";
 import { getStoredLang, storeLang, messages, type Lang } from "./i18n.js";
+import type { ProgressTask } from "./progress.js";
 
 /** The global app state plus the actions that mutate it (Zustand store shape). */
 interface State {
@@ -30,6 +31,7 @@ interface State {
   step: "upload" | "ready";
   mode: "rewrite" | "generate";
   busy: string | null; // 加载提示文案
+  progress: { task: ProgressTask; startedAt: number } | null;
   error: string | null;
   styles: StyleDTO[];
   articleDomains: ArticleDomainDTO[];
@@ -75,6 +77,7 @@ export const useStore = create<State>((set, get) => ({
   step: "upload",
   mode: "rewrite",
   busy: null,
+  progress: null,
   error: null,
   styles: [],
   articleDomains: [],
@@ -144,7 +147,7 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async doGenerateArticle(domainId, customDomain, topic, styleId, targetLength) {
-    set({ busy: messages[get().lang].busyGenerating, error: null });
+    set({ busy: messages[get().lang].busyGenerating, progress: startProgress("article"), error: null });
     try {
       const r = await generateArticle(domainId, customDomain, topic, styleId, targetLength, get().lang);
       set({
@@ -158,15 +161,16 @@ export const useStore = create<State>((set, get) => ({
         currentScore: null,
         step: "ready",
         busy: null,
+        progress: null,
       });
       void get().recomputeScore();
     } catch (e) {
-      set({ error: (e as Error).message, busy: null });
+      set({ error: (e as Error).message, busy: null, progress: null });
     }
   },
 
   async doGenerateArticleFromTitle(title, styleId, targetLength) {
-    set({ busy: messages[get().lang].busyMatching, error: null });
+    set({ busy: messages[get().lang].busyMatching, progress: startProgress("articleFromTitle"), error: null });
     try {
       const r = await generateArticleFromTitle(title, styleId, targetLength, get().lang);
       set({
@@ -180,17 +184,18 @@ export const useStore = create<State>((set, get) => ({
         currentScore: null,
         step: "ready",
         busy: null,
+        progress: null,
       });
       void get().recomputeScore();
     } catch (e) {
-      set({ error: (e as Error).message, busy: null });
+      set({ error: (e as Error).message, busy: null, progress: null });
     }
   },
 
   async doRewrite() {
     const { docId } = get();
     if (!docId) return;
-    set({ busy: messages[get().lang].busyRewriting, error: null });
+    set({ busy: messages[get().lang].busyRewriting, progress: startProgress("rewrite"), error: null });
     try {
       const r = await rewriteDoc(docId, get().lang);
       set({
@@ -199,9 +204,10 @@ export const useStore = create<State>((set, get) => ({
         aiScore: r.score ?? null,
         currentScore: r.score?.after ?? get().currentScore,
         busy: null,
+        progress: null,
       });
     } catch (e) {
-      set({ error: (e as Error).message, busy: null });
+      set({ error: (e as Error).message, busy: null, progress: null });
     }
   },
 
@@ -250,6 +256,7 @@ export const useStore = create<State>((set, get) => ({
       titleIndex: -1,
       step: "upload",
       busy: null,
+      progress: null,
       error: null,
       research: null,
       aiScore: null,
@@ -257,3 +264,7 @@ export const useStore = create<State>((set, get) => ({
     });
   },
 }));
+
+function startProgress(task: ProgressTask): { task: ProgressTask; startedAt: number } {
+  return { task, startedAt: Date.now() };
+}
