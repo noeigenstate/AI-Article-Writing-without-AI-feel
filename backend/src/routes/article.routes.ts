@@ -11,6 +11,7 @@ import {
   matchArticleDomainFromTitle,
   resolveArticleDomain,
   type ArticleDomain,
+  type ArticleRenderBlock,
   type TopicOption,
 } from "../services/article.js";
 import { collectResearch, formatResearchContext } from "../services/research/aggregate.js";
@@ -160,13 +161,18 @@ async function generateArticlePayload(input: {
 
   const docx = await createDocxFromBlocks(articleToDocBlocks(article, lang));
   const parsed = await parseDocx(docx);
-  const rec = saveDoc({ buf: docx, paragraphs: parsed.paragraphs, styleSummary });
+  const renderBlocks = articleToRenderBlocks(article, parsed.paragraphs, lang);
+  const rewriteIndices = renderBlocks
+    .filter((block): block is Extract<ArticleRenderBlock, { type: "paragraph" }> => block.type === "paragraph")
+    .map((block) => block.paragraphIndex)
+    .filter((index): index is number => typeof index === "number");
+  const rec = saveDoc({ buf: docx, paragraphs: parsed.paragraphs, styleSummary, rewriteIndices });
 
   return {
     docId: rec.id,
     styleSummary,
     research: bundleWithImages,
-    renderBlocks: articleToRenderBlocks(article, parsed.paragraphs, lang),
+    renderBlocks,
     titleIndex: titleIndexOf(parsed.paragraphs),
     paragraphs: parsed.paragraphs.map((p) => ({
       index: p.index,

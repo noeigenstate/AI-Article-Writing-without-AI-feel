@@ -29,13 +29,18 @@ export interface ParsedDoc {
   paragraphs: ParsedParagraph[];
 }
 
-const P_RE = /<w:p\b[^>]*?(?:\/>|>[\s\S]*?<\/w:p>)/g;
 const PSTYLE_RE = /<w:pStyle\b[^>]*w:val="([^"]*)"/;
 const WT_RE = /<w:t\b[^>]*>([\s\S]*?)<\/w:t>/g;
 const FIGURE_FALLBACK_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
   "base64"
 );
+
+interface XmlSpan {
+  start: number;
+  end: number;
+  text: string;
+}
 
 /** Decode XML entities back to plain text. */
 function decodeXml(s: string): string {
@@ -97,8 +102,7 @@ export async function parseDocx(buf: Buffer): Promise<ParsedDoc> {
 
   const paragraphs: ParsedParagraph[] = [];
   let index = 0;
-  for (const m of xml.matchAll(P_RE)) {
-    const block = m[0];
+  for (const { text: block } of paragraphSpans(xml)) {
     const styleMatch = block.match(PSTYLE_RE);
     const style = styleMatch ? styleMatch[1] : "";
     paragraphs.push({
@@ -133,7 +137,7 @@ export async function exportDocx(
   let xml = await file.async("string");
 
   let index = 0;
-  xml = xml.replace(P_RE, (block) => {
+  xml = replaceParagraphSpans(xml, (block) => {
     const newText = newTexts[index];
     index++;
     if (newText === undefined) return block;
@@ -142,6 +146,55 @@ export async function exportDocx(
 
   zip.file("word/document.xml", xml);
   return zip.generateAsync({ type: "nodebuffer" });
+}
+
+function paragraphSpans(xml: string): XmlSpan[] {
+  const spans: XmlSpan[] = [];
+  const re = /<w:p\b[^>]*\/>|<w:p\b[^>]*>|<\/w:p>/g;
+  let start = -1;
+  let depth = 0;
+
+  for (const match of xml.matchAll(re)) {
+    const token = match[0];
+    const index = match.index ?? 0;
+    if (token.startsWith("<w:p")) {
+      if (depth === 0) {
+        start = index;
+      }
+      if (token.endsWith("/>")) {
+        if (depth === 0) {
+          spans.push({ start: index, end: index + token.length, text: token });
+          start = -1;
+        }
+      } else {
+        depth += 1;
+      }
+      continue;
+    }
+
+    if (depth > 0) {
+      depth -= 1;
+      if (depth === 0 && start >= 0) {
+        const end = index + token.length;
+        spans.push({ start, end, text: xml.slice(start, end) });
+        start = -1;
+      }
+    }
+  }
+
+  return spans;
+}
+
+function replaceParagraphSpans(xml: string, replacer: (block: string) => string): string {
+  const spans = paragraphSpans(xml);
+  let out = "";
+  let cursor = 0;
+  for (const span of spans) {
+    out += xml.slice(cursor, span.start);
+    out += replacer(span.text);
+    cursor = span.end;
+  }
+  return out + xml.slice(cursor);
 }
 
 /**

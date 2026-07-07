@@ -44,6 +44,13 @@ const doRewrite = process.argv.includes("--rewrite");
 
 const catchphraseScore = scoreText("这波先稳稳拖住用户情绪，再接住需求，最后更狠一点直接拉满转化。", "zh");
 assert.ok(catchphraseScore.signals.some((signal) => signal.id === "model-catchphrase" && signal.hits >= 4));
+assert.equal(scoreText("先接住用户需求。", "zh").signals.find((signal) => signal.id === "model-catchphrase")?.hits, 1);
+assert.equal(scoreText("生态闭环已经形成。", "zh").signals.find((signal) => signal.id === "buzz")?.hits, 1);
+assert.ok(
+  scoreText("综上所述，这就是结论。", "zh")
+    .signals.filter((signal) => signal.id === "opener" || signal.id === "connective")
+    .reduce((sum, signal) => sum + signal.hits, 0) <= 1
+);
 
 for (const sample of SAMPLES) {
   console.log(`\n=== ${sample.title} ===`);

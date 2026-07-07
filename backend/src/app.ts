@@ -1,5 +1,6 @@
-import express, { type Express } from "express";
+import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
+import multer from "multer";
 import healthRoutes from "./routes/health.routes.js";
 import scoreRoutes from "./routes/score.routes.js";
 import stylesRoutes from "./routes/styles.routes.js";
@@ -24,6 +25,25 @@ export function createApp(): Express {
   app.use(stylesRoutes);
   app.use(articleRoutes);
   app.use(rewriteRoutes);
+  app.use(apiErrorHandler);
 
   return app;
+}
+
+function apiErrorHandler(err: unknown, _req: Request, res: Response, next: NextFunction): void {
+  if (res.headersSent) {
+    next(err);
+    return;
+  }
+
+  if (err instanceof multer.MulterError) {
+    const message =
+      err.code === "LIMIT_FILE_SIZE"
+        ? "Uploaded file is too large. Each file must be 10 MB or smaller."
+        : err.message;
+    res.status(400).json({ error: message });
+    return;
+  }
+
+  next(err);
 }

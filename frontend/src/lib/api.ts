@@ -14,6 +14,27 @@ export interface ParagraphDTO {
 
 const BASE = "/api";
 
+async function apiError(res: Response, fallback: string): Promise<Error> {
+  const contentType = res.headers.get("content-type") ?? "";
+  try {
+    if (contentType.includes("application/json")) {
+      const body = (await res.json()) as { error?: unknown };
+      if (typeof body.error === "string" && body.error.trim()) {
+        return new Error(body.error);
+      }
+    } else {
+      const text = (await res.text()).trim();
+      const lower = text.toLowerCase();
+      if (text && !lower.startsWith("<!doctype") && !lower.startsWith("<html")) {
+        return new Error(text.slice(0, 240));
+      }
+    }
+  } catch {
+    /* Keep the stable fallback below. */
+  }
+  return new Error(fallback);
+}
+
 export interface StyleDTO {
   id: string;
   name: string;
@@ -98,7 +119,7 @@ export async function previewResearch(domainId: string, customDomain = "", query
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ domainId, customDomain, query, lang }),
   });
-  if (!res.ok) throw new Error((await res.json()).error ?? "Failed to fetch live sources");
+  if (!res.ok) throw await apiError(res, "Failed to fetch live sources");
   return res.json() as Promise<ResearchBundleDTO>;
 }
 
@@ -109,7 +130,7 @@ export async function fetchArticleTopics(domainId: string, customDomain = "", n 
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ domainId, customDomain, n, lang }),
   });
-  if (!res.ok) throw new Error((await res.json()).error ?? "Failed to generate topics");
+  if (!res.ok) throw await apiError(res, "Failed to generate topics");
   return res.json() as Promise<{
     topics: TopicOptionDTO[];
     research?: ResearchBundleDTO;
@@ -130,7 +151,7 @@ export async function generateArticle(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ domainId, customDomain, topic, styleId, targetLength, lang }),
   });
-  if (!res.ok) throw new Error((await res.json()).error ?? "Failed to generate article");
+  if (!res.ok) throw await apiError(res, "Failed to generate article");
   return res.json() as Promise<GeneratedArticleResponseDTO>;
 }
 
@@ -146,7 +167,7 @@ export async function generateArticleFromTitle(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ title, styleId, targetLength, lang }),
   });
-  if (!res.ok) throw new Error((await res.json()).error ?? "Failed to generate article from title");
+  if (!res.ok) throw await apiError(res, "Failed to generate article from title");
   return res.json() as Promise<GeneratedArticleResponseDTO>;
 }
 
@@ -158,7 +179,7 @@ export async function uploadFiles(target: File, references: File[], styleId = ""
   if (styleId) fd.append("styleId", styleId);
   fd.append("lang", lang);
   const res = await fetch(`${BASE}/upload`, { method: "POST", body: fd });
-  if (!res.ok) throw new Error((await res.json()).error ?? "Upload failed");
+  if (!res.ok) throw await apiError(res, "Upload failed");
   return res.json() as Promise<{
     docId: string;
     styleSummary: string;
@@ -181,7 +202,7 @@ export async function rewriteDoc(docId: string, lang: Lang = "en") {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ docId, lang }),
   });
-  if (!res.ok) throw new Error((await res.json()).error ?? "Rewrite failed");
+  if (!res.ok) throw await apiError(res, "Rewrite failed");
   return res.json() as Promise<{ paragraphs: ParagraphDTO[]; score?: { before: AiScoreDTO; after: AiScoreDTO } }>;
 }
 
@@ -192,7 +213,7 @@ export async function scoreText(text: string, lang: Lang = "en") {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text, lang }),
   });
-  if (!res.ok) throw new Error("Score failed");
+  if (!res.ok) throw await apiError(res, "Score failed");
   return res.json() as Promise<AiScoreDTO>;
 }
 
@@ -203,7 +224,7 @@ export async function fetchTitles(docId: string, n = 3, lang: Lang = "en") {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ docId, n, lang }),
   });
-  if (!res.ok) throw new Error((await res.json()).error ?? "Failed to generate titles");
+  if (!res.ok) throw await apiError(res, "Failed to generate titles");
   return (await res.json()).titles as string[];
 }
 
@@ -220,7 +241,7 @@ export async function fetchAlternatives(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ docId, context, sentence, n, lang }),
   });
-  if (!res.ok) throw new Error((await res.json()).error ?? "Failed to generate alternatives");
+  if (!res.ok) throw await apiError(res, "Failed to generate alternatives");
   return (await res.json()).alternatives as string[];
 }
 
@@ -231,7 +252,7 @@ export async function exportDoc(docId: string, texts: Record<number, string>) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ docId, texts }),
   });
-  if (!res.ok) throw new Error("Export failed");
+  if (!res.ok) throw await apiError(res, "Export failed");
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
