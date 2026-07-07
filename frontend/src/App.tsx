@@ -9,11 +9,12 @@ import { messages } from "./lib/i18n.js";
 
 /** Root component: sidebar navigation, gradient hero, and the active view. */
 export default function App() {
-  const { lang, step, mode, busy, progress, error, styleSummary, reset, setMode, setLang } = useStore();
+  const { lang, step, mode, busy, progress, error, styleSummary, workspaces, reset, setMode, setLang } = useStore();
   const t = messages[lang];
+  const rewriteStep = mode === "rewrite" ? step : workspaces.rewrite.step;
+  const generateStep = mode === "generate" ? step : workspaces.generate.step;
 
   function selectMode(next: "rewrite" | "generate") {
-    if (step === "ready") reset();
     setMode(next);
   }
 
@@ -90,7 +91,14 @@ export default function App() {
           </details>
         )}
 
-        <main>{step === "upload" ? mode === "rewrite" ? <UploadPanel /> : <ArticleGenerator /> : <DocEditor />}</main>
+        <main>
+          <section hidden={mode !== "rewrite"}>
+            {rewriteStep === "upload" ? <UploadPanel /> : mode === "rewrite" ? <DocEditor /> : null}
+          </section>
+          <section hidden={mode !== "generate"}>
+            {generateStep === "upload" ? <ArticleGenerator /> : mode === "generate" ? <DocEditor /> : null}
+          </section>
+        </main>
 
         {step === "ready" && <footer className="hint">{t.editorHint}</footer>}
       </div>

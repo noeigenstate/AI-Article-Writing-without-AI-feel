@@ -19,7 +19,7 @@ export default function ArticleGenerator() {
   const loadArticleDomains = useStore((s) => s.loadArticleDomains);
   const doGenerateArticle = useStore((s) => s.doGenerateArticle);
   const doGenerateArticleFromTitle = useStore((s) => s.doGenerateArticleFromTitle);
-  const research = useStore((s) => s.research);
+  const research = useStore((s) => (s.mode === "generate" ? s.research : s.workspaces.generate.research));
   const setResearch = useStore((s) => s.setResearch);
   const lang = useStore((s) => s.lang);
   const t = messages[lang];
@@ -63,7 +63,7 @@ export default function ArticleGenerator() {
     try {
       const response = await fetchArticleTopics(domainId, domainId === "custom" ? customDomain : "", 6, lang);
       setTopics(response.topics);
-      setResearch(response.research ?? null);
+      setResearch(response.research ?? null, "generate");
     } catch (e) {
       setTopicError((e as Error).message);
     } finally {
@@ -77,7 +77,7 @@ export default function ArticleGenerator() {
     setResearchError(null);
     try {
       const bundle = await previewResearch(domainId, domainId === "custom" ? customDomain : "", "", lang);
-      setResearch(bundle);
+      setResearch(bundle, "generate");
     } catch (e) {
       setResearchError((e as Error).message);
     } finally {
@@ -88,7 +88,7 @@ export default function ArticleGenerator() {
   function clearDomainState(nextDomainId: string) {
     setDomainId(nextDomainId);
     setTopics([]);
-    setResearch(null);
+    setResearch(null, "generate");
     setTopicError(null);
     setResearchError(null);
     setGeneratingTopicId(null);
@@ -187,7 +187,7 @@ export default function ArticleGenerator() {
             onChange={(e) => {
               setCustomDomain(e.target.value);
               setTopics([]);
-              setResearch(null);
+              setResearch(null, "generate");
               setTopicError(null);
               setResearchError(null);
               setGeneratingTopicId(null);
