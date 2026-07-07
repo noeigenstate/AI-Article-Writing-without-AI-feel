@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, type ExecFileOptionsWithStringEncoding } from "node:child_process";
 import { promisify } from "node:util";
 import { cached } from "./cache.js";
 import type { ResearchItem } from "./types.js";
@@ -41,15 +41,20 @@ export function fetchAgentReachSearch(query: string, limit = 6): Promise<Researc
 
   return cached(`agent-reach:${cleanQuery}:${limit}`, 20 * 60 * 1000, async () => {
     const expression = `exa.web_search_exa(query: ${JSON.stringify(cleanQuery)}, numResults: ${limit})`;
-    const { stdout } = await execFileAsync("mcporter", ["call", expression], {
-      encoding: "utf8",
-      timeout: 18_000,
-      maxBuffer: 1_000_000,
-      windowsHide: true,
-    });
+    const { stdout } = await execFileAsync("mcporter", ["call", expression], mcporterExecOptions());
 
     return parseAgentReachSearchOutput(stdout, cleanQuery).slice(0, limit);
   });
+}
+
+export function mcporterExecOptions(platform: NodeJS.Platform = process.platform): ExecFileOptionsWithStringEncoding {
+  return {
+    encoding: "utf8",
+    timeout: 18_000,
+    maxBuffer: 1_000_000,
+    windowsHide: true,
+    shell: platform === "win32",
+  };
 }
 
 function normalizeResult(raw: unknown, query: string): ResearchItem | undefined {

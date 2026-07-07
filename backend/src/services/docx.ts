@@ -32,6 +32,10 @@ export interface ParsedDoc {
 const P_RE = /<w:p\b[^>]*?(?:\/>|>[\s\S]*?<\/w:p>)/g;
 const PSTYLE_RE = /<w:pStyle\b[^>]*w:val="([^"]*)"/;
 const WT_RE = /<w:t\b[^>]*>([\s\S]*?)<\/w:t>/g;
+const FIGURE_FALLBACK_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+  "base64"
+);
 
 /** Decode XML entities back to plain text. */
 function decodeXml(s: string): string {
@@ -169,7 +173,9 @@ export async function createDocxFromBlocks(blocks: DocxBlock[]): Promise<Buffer>
   word?.folder("_rels")?.file("document.xml.rels", documentRelsXml(figureBlocks.length));
   const media = word?.folder("media");
   figureBlocks.forEach((figure, index) => {
-    media?.file(`figure${index + 1}.svg`, figure.svg);
+    const id = index + 1;
+    media?.file(`figure${id}.svg`, figure.svg);
+    media?.file(`figure${id}.png`, FIGURE_FALLBACK_PNG);
   });
   return zip.generateAsync({ type: "nodebuffer" });
 }
@@ -196,6 +202,7 @@ function documentXml(blocks: DocxBlock[]): string {
   xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
   xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
   xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+  xmlns:asvg="http://schemas.microsoft.com/office/drawing/2016/SVG/main"
   xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
   <w:body>
     ${body}
@@ -252,7 +259,8 @@ function tableRowXml(cells: string[], isHeader: boolean): string {
 
 /** Render a figure block (title + embedded SVG drawing + caption) as XML. */
 function figureBlockXml(figure: Extract<DocxBlock, { type: "figure" }>, index: number): string {
-  const rid = `rIdFigure${index}`;
+  const pngRid = `rIdFigurePng${index}`;
+  const svgRid = `rIdFigureSvg${index}`;
   const cx = 5_760_000;
   const cy = 2_520_000;
   return `${paragraphXml("heading2", figure.title)}
@@ -268,7 +276,13 @@ function figureBlockXml(figure: Extract<DocxBlock, { type: "figure" }>, index: n
             <pic:cNvPicPr/>
           </pic:nvPicPr>
           <pic:blipFill>
-            <a:blip r:embed="${rid}"/>
+            <a:blip r:embed="${pngRid}">
+              <a:extLst>
+                <a:ext uri="{96DAC541-7B7A-43D3-8B79-37D633B846F1}">
+                  <asvg:svgBlip r:embed="${svgRid}"/>
+                </a:ext>
+              </a:extLst>
+            </a:blip>
             <a:stretch><a:fillRect/></a:stretch>
           </pic:blipFill>
           <pic:spPr>
@@ -289,6 +303,7 @@ function contentTypesXml(): string {
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
   <Default Extension="xml" ContentType="application/xml"/>
+  <Default Extension="png" ContentType="image/png"/>
   <Default Extension="svg" ContentType="image/svg+xml"/>
   <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
   <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
@@ -307,7 +322,10 @@ function packageRelsXml(): string {
 function documentRelsXml(figureCount = 0): string {
   const figureRels = Array.from({ length: figureCount }, (_, index) => {
     const id = index + 1;
-    return `<Relationship Id="rIdFigure${id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/figure${id}.svg"/>`;
+    return [
+      `<Relationship Id="rIdFigurePng${id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/figure${id}.png"/>`,
+      `<Relationship Id="rIdFigureSvg${id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/figure${id}.svg"/>`,
+    ].join("");
   }).join("");
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">

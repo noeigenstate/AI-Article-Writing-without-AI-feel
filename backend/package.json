@@ -9,6 +9,7 @@
     "start": "tsx src/index.ts",
     "build": "tsc -p tsconfig.json",
     "test:docx": "tsx src/scripts/test-docx.ts",
+    "test:splitter": "tsx src/scripts/test-splitter.ts",
     "test:article": "tsx src/scripts/test-article.ts",
     "test:research": "tsx src/scripts/test-research.ts",
     "test:llm": "tsx src/scripts/test-llm.ts",
