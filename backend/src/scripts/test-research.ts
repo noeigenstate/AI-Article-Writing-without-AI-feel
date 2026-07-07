@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { dedupeResearchItems, formatResearchContext } from "../services/research/aggregate.js";
-import { parseAgentReachSearchOutput } from "../services/research/agentReach.js";
+import { mcporterExecOptions, parseAgentReachSearchOutput } from "../services/research/agentReach.js";
 import { parseArxivAtom } from "../services/research/arxiv.js";
 import { extractSourceImageFromHtml } from "../services/research/images.js";
 import { parseFeedXml } from "../services/research/rss.js";
@@ -122,6 +122,8 @@ assert.equal(agentReachItems[0].authors[0], "Riley Stone");
 assert.ok(agentReachItems[0].summary.includes("Browser-enabled agents"));
 
 assert.deepEqual(parseAgentReachSearchOutput("not json", "agentic browser research"), []);
+assert.equal(mcporterExecOptions("win32").shell, true);
+assert.equal(mcporterExecOptions("linux").shell, false);
 
 const sourceImage = extractSourceImageFromHtml(
   `<html><head><meta property="og:image" content="/images/story.png"></head></html>`,

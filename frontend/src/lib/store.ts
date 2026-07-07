@@ -20,6 +20,24 @@ import {
 import { getStoredLang, storeLang, messages, type Lang } from "./i18n.js";
 import type { ProgressTask } from "./progress.js";
 
+type Mode = "rewrite" | "generate";
+type Step = "upload" | "ready";
+
+interface WorkspaceState {
+  docId: string | null;
+  styleSummary: string;
+  paragraphs: ParagraphDTO[];
+  renderBlocks: ArticleRenderBlockDTO[] | null;
+  titleIndex: number;
+  step: Step;
+  busy: string | null;
+  progress: { task: ProgressTask; startedAt: number } | null;
+  error: string | null;
+  research: ResearchBundleDTO | null;
+  aiScore: { before: AiScoreDTO; after: AiScoreDTO } | null;
+  currentScore: AiScoreDTO | null;
+}
+
 /** The global app state plus the actions that mutate it (Zustand store shape). */
 interface State {
   lang: Lang;
@@ -28,8 +46,8 @@ interface State {
   paragraphs: ParagraphDTO[];
   renderBlocks: ArticleRenderBlockDTO[] | null;
   titleIndex: number;
-  step: "upload" | "ready";
-  mode: "rewrite" | "generate";
+  step: Step;
+  mode: Mode;
   busy: string | null; // 加载提示文案
   progress: { task: ProgressTask; startedAt: number } | null;
   error: string | null;
@@ -38,11 +56,12 @@ interface State {
   research: ResearchBundleDTO | null;
   aiScore: { before: AiScoreDTO; after: AiScoreDTO } | null; // 改写前后对照
   currentScore: AiScoreDTO | null; // 当前文档（含手动编辑）的实时分
+  workspaces: Record<Mode, WorkspaceState>;
 
   setLang: (lang: Lang) => void;
-  recomputeScore: () => Promise<void>;
-  setMode: (mode: "rewrite" | "generate") => void;
-  setResearch: (research: ResearchBundleDTO | null) => void;
+  recomputeScore: (mode?: Mode) => Promise<void>;
+  setMode: (mode: Mode) => void;
+  setResearch: (research: ResearchBundleDTO | null, mode?: Mode) => void;
   loadStyles: () => Promise<void>;
   loadArticleDomains: () => Promise<void>;
   doUpload: (target: File, refs: File[], styleId: string) => Promise<void>;
@@ -61,40 +80,78 @@ interface State {
   reset: () => void;
 }
 
-/**
- * The single Zustand store backing the whole UI.
- *
- * Holds the current document/editor state and exposes async actions that call
- * the API client and update state (upload, generate, rewrite, score, export).
- */
-export const useStore = create<State>((set, get) => ({
-  lang: getStoredLang(),
+const emptyWorkspace = (): WorkspaceState => ({
   docId: null,
   styleSummary: "",
   paragraphs: [],
   renderBlocks: null,
   titleIndex: -1,
   step: "upload",
-  mode: "rewrite",
   busy: null,
   progress: null,
   error: null,
-  styles: [],
-  articleDomains: [],
   research: null,
   aiScore: null,
   currentScore: null,
+});
 
-  async recomputeScore() {
-    const { paragraphs, lang, aiScore } = get();
+function workspaceFromState(s: State): WorkspaceState {
+  return {
+    docId: s.docId,
+    styleSummary: s.styleSummary,
+    paragraphs: s.paragraphs,
+    renderBlocks: s.renderBlocks,
+    titleIndex: s.titleIndex,
+    step: s.step,
+    busy: s.busy,
+    progress: s.progress,
+    error: s.error,
+    research: s.research,
+    aiScore: s.aiScore,
+    currentScore: s.currentScore,
+  };
+}
+
+function workspacePatch(s: State, mode: Mode, patch: Partial<WorkspaceState>) {
+  const base = s.mode === mode ? workspaceFromState(s) : s.workspaces[mode];
+  const nextWorkspace = { ...base, ...patch };
+  const workspaces = { ...s.workspaces, [mode]: nextWorkspace };
+  return s.mode === mode ? { ...patch, workspaces } : { workspaces };
+}
+
+/**
+ * The single Zustand store backing the whole UI.
+ *
+ * Holds the current document/editor state and exposes async actions that call
+ * the API client and update state (upload, generate, rewrite, score, export).
+ */
+const rewriteWorkspace = emptyWorkspace();
+const generateWorkspace = emptyWorkspace();
+
+export const useStore = create<State>((set, get) => ({
+  lang: getStoredLang(),
+  ...rewriteWorkspace,
+  mode: "rewrite",
+  styles: [],
+  articleDomains: [],
+  workspaces: {
+    rewrite: rewriteWorkspace,
+    generate: generateWorkspace,
+  },
+
+  async recomputeScore(mode = get().mode) {
+    const state = get();
+    const workspace = state.mode === mode ? workspaceFromState(state) : state.workspaces[mode];
+    const { paragraphs, aiScore } = workspace;
+    const { lang } = state;
     const text = paragraphs.map((p) => p.sentences.join("")).join("\n");
-    if (!text.trim()) return set({ aiScore: null, currentScore: null });
+    if (!text.trim()) return set((s) => workspacePatch(s, mode, { aiScore: null, currentScore: null }));
     try {
       const nextScore = await scoreText(text, lang);
-      set({
+      set((s) => workspacePatch(s, mode, {
         aiScore: aiScore ? { before: aiScore.before, after: nextScore } : null,
         currentScore: nextScore,
-      });
+      }));
     } catch {
       /* 评分失败不阻塞 */
     }
@@ -109,11 +166,20 @@ export const useStore = create<State>((set, get) => ({
   },
 
   setMode(mode) {
-    set({ mode, error: null });
+    set((s) => {
+      if (s.mode === mode) return {};
+      const currentWorkspace = workspaceFromState(s);
+      const workspaces = { ...s.workspaces, [s.mode]: currentWorkspace };
+      return {
+        ...workspaces[mode],
+        mode,
+        workspaces,
+      };
+    });
   },
 
-  setResearch(research) {
-    set({ research });
+  setResearch(research, mode = get().mode) {
+    set((s) => workspacePatch(s, mode, { research }));
   },
 
   async loadStyles() {
@@ -125,10 +191,11 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async doUpload(target, refs, styleId) {
-    set({ busy: messages[get().lang].busyParsing, error: null });
+    const mode = get().mode;
+    set((s) => workspacePatch(s, mode, { busy: messages[get().lang].busyParsing, error: null }));
     try {
       const r = await uploadFiles(target, refs, styleId, get().lang);
-      set({
+      set((s) => workspacePatch(s, mode, {
         docId: r.docId,
         styleSummary: r.styleSummary,
         paragraphs: r.paragraphs,
@@ -139,18 +206,20 @@ export const useStore = create<State>((set, get) => ({
         currentScore: null,
         step: "ready",
         busy: null,
-      });
-      void get().recomputeScore();
+        progress: null,
+      }));
+      void get().recomputeScore(mode);
     } catch (e) {
-      set({ error: (e as Error).message, busy: null });
+      set((s) => workspacePatch(s, mode, { error: (e as Error).message, busy: null, progress: null }));
     }
   },
 
   async doGenerateArticle(domainId, customDomain, topic, styleId, targetLength) {
-    set({ busy: messages[get().lang].busyGenerating, progress: startProgress("article"), error: null });
+    const mode = get().mode;
+    set((s) => workspacePatch(s, mode, { busy: messages[get().lang].busyGenerating, progress: startProgress("article"), error: null }));
     try {
       const r = await generateArticle(domainId, customDomain, topic, styleId, targetLength, get().lang);
-      set({
+      set((s) => workspacePatch(s, mode, {
         docId: r.docId,
         styleSummary: r.styleSummary,
         paragraphs: r.paragraphs,
@@ -162,18 +231,19 @@ export const useStore = create<State>((set, get) => ({
         step: "ready",
         busy: null,
         progress: null,
-      });
-      void get().recomputeScore();
+      }));
+      void get().recomputeScore(mode);
     } catch (e) {
-      set({ error: (e as Error).message, busy: null, progress: null });
+      set((s) => workspacePatch(s, mode, { error: (e as Error).message, busy: null, progress: null }));
     }
   },
 
   async doGenerateArticleFromTitle(title, styleId, targetLength) {
-    set({ busy: messages[get().lang].busyMatching, progress: startProgress("articleFromTitle"), error: null });
+    const mode = get().mode;
+    set((s) => workspacePatch(s, mode, { busy: messages[get().lang].busyMatching, progress: startProgress("articleFromTitle"), error: null }));
     try {
       const r = await generateArticleFromTitle(title, styleId, targetLength, get().lang);
-      set({
+      set((s) => workspacePatch(s, mode, {
         docId: r.docId,
         styleSummary: r.styleSummary,
         paragraphs: r.paragraphs,
@@ -185,34 +255,36 @@ export const useStore = create<State>((set, get) => ({
         step: "ready",
         busy: null,
         progress: null,
-      });
-      void get().recomputeScore();
+      }));
+      void get().recomputeScore(mode);
     } catch (e) {
-      set({ error: (e as Error).message, busy: null, progress: null });
+      set((s) => workspacePatch(s, mode, { error: (e as Error).message, busy: null, progress: null }));
     }
   },
 
   async doRewrite() {
+    const mode = get().mode;
     const { docId } = get();
     if (!docId) return;
-    set({ busy: messages[get().lang].busyRewriting, progress: startProgress("rewrite"), error: null });
+    set((s) => workspacePatch(s, mode, { busy: messages[get().lang].busyRewriting, progress: startProgress("rewrite"), error: null }));
     try {
       const r = await rewriteDoc(docId, get().lang);
-      set({
+      set((s) => workspacePatch(s, mode, {
         paragraphs: r.paragraphs,
-        renderBlocks: get().renderBlocks,
+        renderBlocks: s.mode === mode ? s.renderBlocks : s.workspaces[mode].renderBlocks,
         aiScore: r.score ?? null,
-        currentScore: r.score?.after ?? get().currentScore,
+        currentScore: r.score?.after ?? (s.mode === mode ? s.currentScore : s.workspaces[mode].currentScore),
         busy: null,
         progress: null,
-      });
+      }));
     } catch (e) {
-      set({ error: (e as Error).message, busy: null, progress: null });
+      set((s) => workspacePatch(s, mode, { error: (e as Error).message, busy: null, progress: null }));
     }
   },
 
   setSentence(paraIndex, sentenceIdx, text) {
-    set((s) => ({
+    const mode = get().mode;
+    set((s) => workspacePatch(s, mode, {
       paragraphs: s.paragraphs.map((p) =>
         p.index === paraIndex
           ? { ...p, sentences: p.sentences.map((x, i) => (i === sentenceIdx ? text : x)) }
@@ -222,7 +294,8 @@ export const useStore = create<State>((set, get) => ({
   },
 
   setParagraph(paraIndex, text) {
-    set((s) => ({
+    const mode = get().mode;
+    set((s) => workspacePatch(s, mode, {
       paragraphs: s.paragraphs.map((p) =>
         p.index === paraIndex ? { ...p, sentences: [text] } : p
       ),
@@ -230,9 +303,10 @@ export const useStore = create<State>((set, get) => ({
   },
 
   async doExport() {
+    const mode = get().mode;
     const { docId, paragraphs } = get();
     if (!docId) return;
-    set({ busy: messages[get().lang].busyExporting, error: null });
+    set((s) => workspacePatch(s, mode, { busy: messages[get().lang].busyExporting, error: null }));
     try {
       // 只发回真正改动过的段落；未改动的段落不传，导出时原样保留（含段内字符级格式）
       const texts: Record<number, string> = {};
@@ -241,26 +315,19 @@ export const useStore = create<State>((set, get) => ({
         if (current !== p.original) texts[p.index] = current;
       }
       await exportDoc(docId, texts);
-      set({ busy: null });
+      set((s) => workspacePatch(s, mode, { busy: null }));
     } catch (e) {
-      set({ error: (e as Error).message, busy: null });
+      set((s) => workspacePatch(s, mode, { error: (e as Error).message, busy: null }));
     }
   },
 
   reset() {
-    set({
-      docId: null,
-      styleSummary: "",
-      paragraphs: [],
-      renderBlocks: null,
-      titleIndex: -1,
-      step: "upload",
-      busy: null,
-      progress: null,
-      error: null,
-      research: null,
-      aiScore: null,
-      currentScore: null,
+    set((s) => {
+      const nextWorkspace = emptyWorkspace();
+      return {
+        ...nextWorkspace,
+        workspaces: { ...s.workspaces, [s.mode]: nextWorkspace },
+      };
     });
   },
 }));

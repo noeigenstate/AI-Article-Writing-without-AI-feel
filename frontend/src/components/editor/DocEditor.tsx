@@ -152,7 +152,7 @@ export default function DocEditor() {
 
       const fallback = block.paragraphIndex !== undefined ? paragraphByIndex.get(block.paragraphIndex) : undefined;
       const paragraph = fallback ?? paragraphFromBlock(block, index);
-      return renderParagraph(paragraph, paragraph.index === titleIndex, interactive);
+      return renderParagraph(paragraph, paragraph.index === titleIndex, interactive && Boolean(fallback));
     });
   }
 

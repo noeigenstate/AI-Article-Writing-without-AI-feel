@@ -29,6 +29,13 @@ export function storeLang(lang: Lang): void {
 export interface Dict {
   tagline: string;
   langToggle: string;
+  // sidebar + hero
+  navTools: string;
+  heroRewriteTitle: string;
+  heroRewriteSub: string;
+  heroGenerateTitle: string;
+  heroGenerateSub: string;
+  editorTitle: string;
   // header
   modeRewrite: string;
   modeGenerate: string;
@@ -118,6 +125,14 @@ export interface Dict {
 const en: Dict = {
   tagline: "Write like a human, not a bot.",
   langToggle: "中文",
+  navTools: "Tools",
+  heroRewriteTitle: "Humanize AI Writing",
+  heroRewriteSub:
+    "Rewrite AI-flavored drafts into text that reads human. Upload a Word file, polish sentence by sentence, then export.",
+  heroGenerateTitle: "Source-Backed Articles",
+  heroGenerateSub:
+    "Generate an article from a title or domain, grounded in live sources such as arXiv papers and news RSS.",
+  editorTitle: "Edit & Polish",
   modeRewrite: "Rewrite Word",
   modeGenerate: "Generate article",
   polishAll: "Polish whole doc (de-AI)",
@@ -227,6 +242,12 @@ const en: Dict = {
 const zh: Dict = {
   tagline: "让文字写得像人，也站得住。",
   langToggle: "EN",
+  navTools: "工具",
+  heroRewriteTitle: "AI 拟人化改写",
+  heroRewriteSub: "把 AI 味很重的稿子改写成更像真人写的文字。上传 Word，逐句润色，一键导出。",
+  heroGenerateTitle: "AI 文章生成",
+  heroGenerateSub: "按标题或领域生成文章，自动引用 arXiv 论文与新闻 RSS 等实时资料。",
+  editorTitle: "编辑与润色",
   modeRewrite: "改写 Word",
   modeGenerate: "生成文章",
   polishAll: "整篇润色（去 AI 味）",

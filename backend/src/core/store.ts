@@ -11,10 +11,13 @@ export interface DocRecord {
   buf: Buffer; // 原始 docx，导出时复用以保留格式
   paragraphs: ParsedParagraph[];
   styleSummary: string;
+  rewriteIndices?: number[];
 }
 
 /** In-memory document store keyed by generated id. */
-const store = new Map<string, DocRecord>();
+const DOC_TTL_MS = 6 * 60 * 60 * 1000;
+const MAX_DOCS = 50;
+const store = new Map<string, DocRecord & { savedAt: number; lastAccessedAt: number }>();
 
 /**
  * Store a document and assign it a fresh id.
@@ -23,9 +26,12 @@ const store = new Map<string, DocRecord>();
  * @returns The stored record, including its new id.
  */
 export function saveDoc(rec: Omit<DocRecord, "id">): DocRecord {
+  pruneExpired();
   const id = randomUUID();
-  const full = { id, ...rec };
+  const now = Date.now();
+  const full = { id, ...rec, savedAt: now, lastAccessedAt: now };
   store.set(id, full);
+  pruneOverflow();
   return full;
 }
 
@@ -36,5 +42,28 @@ export function saveDoc(rec: Omit<DocRecord, "id">): DocRecord {
  * @returns The record, or undefined if unknown/expired.
  */
 export function getDoc(id: string): DocRecord | undefined {
-  return store.get(id);
+  pruneExpired();
+  const rec = store.get(id);
+  if (rec) {
+    rec.lastAccessedAt = Date.now();
+  }
+  return rec;
+}
+
+function pruneExpired(now = Date.now()): void {
+  for (const [id, rec] of store) {
+    if (now - rec.lastAccessedAt > DOC_TTL_MS) {
+      store.delete(id);
+    }
+  }
+}
+
+function pruneOverflow(): void {
+  if (store.size <= MAX_DOCS) {
+    return;
+  }
+  const ordered = [...store.entries()].sort((a, b) => a[1].lastAccessedAt - b[1].lastAccessedAt);
+  for (const [id] of ordered.slice(0, store.size - MAX_DOCS)) {
+    store.delete(id);
+  }
 }

@@ -8,7 +8,6 @@ import {
 } from "../../lib/api.js";
 import { useStore } from "../../lib/store.js";
 import { Sparkle } from "../common/icons.js";
-import LiquidGlass from "../common/LiquidGlass.js";
 import ProgressBanner from "../common/ProgressBanner.js";
 import { messages } from "../../lib/i18n.js";
 
@@ -20,7 +19,7 @@ export default function ArticleGenerator() {
   const loadArticleDomains = useStore((s) => s.loadArticleDomains);
   const doGenerateArticle = useStore((s) => s.doGenerateArticle);
   const doGenerateArticleFromTitle = useStore((s) => s.doGenerateArticleFromTitle);
-  const research = useStore((s) => s.research);
+  const research = useStore((s) => (s.mode === "generate" ? s.research : s.workspaces.generate.research));
   const setResearch = useStore((s) => s.setResearch);
   const lang = useStore((s) => s.lang);
   const t = messages[lang];
@@ -64,7 +63,7 @@ export default function ArticleGenerator() {
     try {
       const response = await fetchArticleTopics(domainId, domainId === "custom" ? customDomain : "", 6, lang);
       setTopics(response.topics);
-      setResearch(response.research ?? null);
+      setResearch(response.research ?? null, "generate");
     } catch (e) {
       setTopicError((e as Error).message);
     } finally {
@@ -78,7 +77,7 @@ export default function ArticleGenerator() {
     setResearchError(null);
     try {
       const bundle = await previewResearch(domainId, domainId === "custom" ? customDomain : "", "", lang);
-      setResearch(bundle);
+      setResearch(bundle, "generate");
     } catch (e) {
       setResearchError((e as Error).message);
     } finally {
@@ -89,7 +88,7 @@ export default function ArticleGenerator() {
   function clearDomainState(nextDomainId: string) {
     setDomainId(nextDomainId);
     setTopics([]);
-    setResearch(null);
+    setResearch(null, "generate");
     setTopicError(null);
     setResearchError(null);
     setGeneratingTopicId(null);
@@ -129,7 +128,7 @@ export default function ArticleGenerator() {
 
   return (
     <div className="generator">
-      <LiquidGlass className="step lavender" radius={26} displacement={34}>
+      <section className="step lavender">
         <div className="step-head">
           <span className="badge lavender">1</span>
           <h2>{t.genStep1}</h2>
@@ -188,7 +187,7 @@ export default function ArticleGenerator() {
             onChange={(e) => {
               setCustomDomain(e.target.value);
               setTopics([]);
-              setResearch(null);
+              setResearch(null, "generate");
               setTopicError(null);
               setResearchError(null);
               setGeneratingTopicId(null);
@@ -197,9 +196,9 @@ export default function ArticleGenerator() {
             placeholder={t.customDomainPlaceholder}
           />
         )}
-      </LiquidGlass>
+      </section>
 
-      <LiquidGlass className="step mint" radius={26} displacement={30}>
+      <section className="step mint">
         <div className="step-head">
           <span className="badge mint">2</span>
           <h2>{t.genStep2}</h2>
@@ -291,7 +290,7 @@ export default function ArticleGenerator() {
             </article>
           ))}
         </div>
-      </LiquidGlass>
+      </section>
     </div>
   );
 }

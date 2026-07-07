@@ -11,7 +11,7 @@ import {
   fullText,
 } from "../services/rewrite.js";
 import { scoreText } from "../services/aiScore.js";
-import { saveDoc, getDoc } from "../core/store.js";
+import { saveDoc, getDoc, type DocRecord } from "../core/store.js";
 import { getBuiltinStyle } from "../data/styles.js";
 import { normalizeLang, SERVER_MESSAGES, tr } from "../core/i18n.js";
 import type { Lang } from "../core/i18n.js";
@@ -20,7 +20,13 @@ import type { Lang } from "../core/i18n.js";
 const router = Router();
 
 /** Multer instance keeping uploads in memory (docs are processed, not persisted). */
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024,
+    files: 11,
+  },
+});
 
 type RewrittenParagraph = {
   index: number;
@@ -59,13 +65,42 @@ function humanScoreSafeParagraphs(
     return rewrittenScore >= originalScore ? p : paragraphResponse(source, source.text);
   });
 
-  const guardedScore = scoreText(guarded.map((p) => p.rewritten).join("\n"), lang);
+  const guardedScore = scoreRewrittenParagraphs(guarded, originalByIndex, lang);
   if (guardedScore.score >= beforeScore.score) {
     return { paragraphs: guarded, score: guardedScore };
   }
 
-  const fallback = original.map((p) => paragraphResponse(p, p.text));
+  const fallback = rewritten.map((p) => {
+    const source = originalByIndex.get(p.index);
+    return source ? paragraphResponse(source, source.text) : p;
+  });
   return { paragraphs: fallback, score: beforeScore };
+}
+
+function rewriteTargetsForDoc(rec: DocRecord): DocRecord["paragraphs"] {
+  if (!rec.rewriteIndices) {
+    return rec.paragraphs;
+  }
+  const allowed = new Set(rec.rewriteIndices);
+  return rec.paragraphs.filter((p) => allowed.has(p.index));
+}
+
+function scoreParagraphs(paragraphs: { text: string }[], lang: Lang) {
+  return scoreText(paragraphs.map((p) => p.text).join("\n"), lang);
+}
+
+function scoreRewrittenParagraphs(
+  paragraphs: RewrittenParagraph[],
+  originalByIndex: Map<number, { index: number; kind: string; text: string }>,
+  lang: Lang
+) {
+  return scoreText(
+    paragraphs
+      .filter((p) => originalByIndex.has(p.index))
+      .map((p) => p.rewritten)
+      .join("\n"),
+    lang
+  );
 }
 
 /**
@@ -136,10 +171,11 @@ router.post("/api/rewrite", async (req, res) => {
     const lang = normalizeLang(rawLang);
     const rec = getDoc(docId);
     if (!rec) return res.status(404).json({ error: tr(SERVER_MESSAGES.docNotFound, lang) });
+    const rewriteTargets = rewriteTargetsForDoc(rec);
 
     const map = await rewriteDocument(
       rec.styleSummary,
-      rec.paragraphs.map((p) => ({ index: p.index, kind: p.kind, text: p.text })),
+      rewriteTargets.map((p) => ({ index: p.index, kind: p.kind, text: p.text })),
       12,
       lang
     );
@@ -150,11 +186,12 @@ router.post("/api/rewrite", async (req, res) => {
     });
 
     // 本地算改写前后的人类感分，给前端展示「42 → 86」的效果对照。
-    const before = scoreText(rec.paragraphs.map((p) => p.text).join("\n"), lang);
-    let after = scoreText(paragraphs.map((p) => p.rewritten).join("\n"), lang);
+    const before = scoreParagraphs(rewriteTargets, lang);
+    const targetByIndex = new Map(rewriteTargets.map((p) => [p.index, p]));
+    let after = scoreRewrittenParagraphs(paragraphs, targetByIndex, lang);
 
     if (after.score < before.score) {
-      const guarded = humanScoreSafeParagraphs(rec.paragraphs, paragraphs, before, lang);
+      const guarded = humanScoreSafeParagraphs(rewriteTargets, paragraphs, before, lang);
       paragraphs = guarded.paragraphs;
       after = guarded.score;
     }

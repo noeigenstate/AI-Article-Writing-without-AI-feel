@@ -8,6 +8,8 @@ import {
 import { parseJson } from "../lib/json.js";
 import type { Lang } from "../core/i18n.js";
 
+type ChatFn = typeof chat;
+
 /**
  * Distill a style profile from sample text.
  *
@@ -60,9 +62,10 @@ export async function generateTitles(
   styleSummary: string,
   text: string,
   n = 3,
-  lang: Lang = "en"
+  lang: Lang = "en",
+  ask: ChatFn = chat
 ): Promise<string[]> {
-  const raw = await chat(rewriteTitlePrompt(styleSummary, text, n, lang), { temperature: 0.85 });
+  const raw = await ask(rewriteTitlePrompt(styleSummary, text, n, lang), { temperature: 0.85 });
   try {
     const arr = parseJson<string[]>(raw);
     return arr.filter((x) => typeof x === "string" && x.trim()).map((x) => x.trim()).slice(0, n);
@@ -88,7 +91,8 @@ export async function rewriteDocument(
   styleSummary: string,
   paragraphs: { index: number; kind: string; text: string }[],
   chunkSize = 12,
-  lang: Lang = "en"
+  lang: Lang = "en",
+  ask: ChatFn = chat
 ): Promise<Map<number, string>> {
   const result = new Map<number, string>();
   const nonEmpty = paragraphs.filter((p) => p.text.trim().length > 0);
@@ -96,7 +100,7 @@ export async function rewriteDocument(
 
   // 标题：独立逻辑，读全文概括起标题（取第一个候选）
   if (titleIndex >= 0) {
-    const titles = await generateTitles(styleSummary, fullText(paragraphs), 1, lang);
+    const titles = await generateTitles(styleSummary, fullText(paragraphs), 1, lang, ask);
     const original = nonEmpty.find((p) => p.index === titleIndex)!.text;
     result.set(titleIndex, titles[0] ?? original);
   }
@@ -110,11 +114,12 @@ export async function rewriteDocument(
   await Promise.all(
     chunks.map(async (chunk) => {
       try {
-        const raw = await chat(rewriteDocPrompt(styleSummary, chunk, lang), { temperature: 0.7 });
+        const allowed = new Set(chunk.map((p) => p.index));
+        const raw = await ask(rewriteDocPrompt(styleSummary, chunk, lang), { temperature: 0.7 });
         const items = parseJson<{ index: number | string; text: unknown }[]>(raw);
         for (const it of items) {
           const idx = Number(it.index); // 模型可能把序号返回成字符串
-          if (Number.isInteger(idx) && typeof it.text === "string") {
+          if (Number.isInteger(idx) && allowed.has(idx) && typeof it.text === "string") {
             result.set(idx, it.text);
           }
         }

@@ -227,6 +227,16 @@ const SCORE_FORMULA = {
   thresholds: { high: 70, medium: 40 },
 };
 
+interface TextRange {
+  start: number;
+  end: number;
+}
+
+interface ScoringSentence {
+  text: string;
+  start: number;
+}
+
 /**
  * Split text into rough sentences for both languages (heuristic, scoring only).
  *
@@ -234,22 +244,69 @@ const SCORE_FORMULA = {
  * @returns Non-empty, trimmed sentence-ish pieces.
  */
 function splitForScoring(text: string): string[] {
-  return text
-    .split(/[。.!?！？;；\n]+/)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
+  return sentenceRangesForScoring(text).map((s) => s.text);
 }
 
-/**
- * Count non-overlapping occurrences of a phrase.
- *
- * @param text Haystack.
- * @param phrase Needle.
- * @returns Occurrence count (0 for an empty needle).
- */
-function countPhrase(text: string, phrase: string): number {
-  if (!phrase) return 0;
-  return text.split(phrase).length - 1;
+function sentenceRangesForScoring(text: string): ScoringSentence[] {
+  const ranges: ScoringSentence[] = [];
+  const re = /[。.!?！？;；\n]+/g;
+  let start = 0;
+  for (const match of text.matchAll(re)) {
+    const piece = text.slice(start, match.index);
+    pushScoringSentence(ranges, piece, start);
+    start = (match.index ?? 0) + match[0].length;
+  }
+  pushScoringSentence(ranges, text.slice(start), start);
+  return ranges;
+}
+
+function pushScoringSentence(out: ScoringSentence[], value: string, absoluteStart: number): void {
+  const leading = value.match(/^\s*/)?.[0].length ?? 0;
+  const trimmed = value.trim();
+  if (trimmed) {
+    out.push({ text: trimmed, start: absoluteStart + leading });
+  }
+}
+
+function sortedUniquePhrases(phrases: string[]): string[] {
+  return [...new Set(phrases.map((p) => p.toLowerCase()).filter(Boolean))].sort((a, b) => b.length - a.length);
+}
+
+function phraseRanges(text: string, phrases: string[]): TextRange[] {
+  const haystack = text.toLowerCase();
+  const ranges: TextRange[] = [];
+  for (const phrase of sortedUniquePhrases(phrases)) {
+    let offset = 0;
+    while (offset < haystack.length) {
+      const start = haystack.indexOf(phrase, offset);
+      if (start < 0) break;
+      const range = { start, end: start + phrase.length };
+      if (!ranges.some((r) => rangesOverlap(r, range))) {
+        ranges.push(range);
+      }
+      offset = start + phrase.length;
+    }
+  }
+  return ranges.sort((a, b) => a.start - b.start);
+}
+
+function sentenceStartPhraseRanges(text: string, phrases: string[]): TextRange[] {
+  const haystack = text.toLowerCase();
+  const sorted = sortedUniquePhrases(phrases);
+  const ranges: TextRange[] = [];
+  for (const sentence of sentenceRangesForScoring(text)) {
+    const sentenceTail = text.slice(sentence.start);
+    const stripped = sentenceTail.match(/^[^0-9a-z一-龥]+/i)?.[0].length ?? 0;
+    const start = sentence.start + stripped;
+    const head = haystack.slice(start);
+    const phrase = sorted.find((p) => head.startsWith(p));
+    if (phrase) ranges.push({ start, end: start + phrase.length });
+  }
+  return ranges;
+}
+
+function rangesOverlap(a: TextRange, b: TextRange): boolean {
+  return a.start < b.end && b.start < a.end;
 }
 
 /**
@@ -257,21 +314,22 @@ function countPhrase(text: string, phrase: string): number {
  *
  * @param group The phrase group definition.
  * @param text Lowercased-internally haystack.
- * @param sentences Pre-split sentences (for sentence-start matching).
  * @param units Length units (per ~100–120 chars/words) for normalization.
  * @returns The group's hits and capped point contribution.
  */
-function phraseGroupScore(group: PhraseGroup, text: string, sentences: string[], units: number): ScoreSignal {
-  const haystack = text.toLowerCase();
-  let hits = 0;
-  if (group.atSentenceStart) {
-    for (const s of sentences) {
-      const head = s.toLowerCase().replace(/^[^0-9a-z一-龥]+/, "");
-      if (group.phrases.some((p) => head.startsWith(p.toLowerCase()))) hits++;
+function phraseGroupScore(group: PhraseGroup, text: string, units: number, claimedRanges: TextRange[]): ScoreSignal {
+  const ranges = group.atSentenceStart
+    ? sentenceStartPhraseRanges(text, group.phrases)
+    : phraseRanges(text, group.phrases);
+  const accepted: TextRange[] = [];
+  for (const range of ranges) {
+    if (claimedRanges.some((claimed) => rangesOverlap(claimed, range))) {
+      continue;
     }
-  } else {
-    for (const p of group.phrases) hits += countPhrase(haystack, p.toLowerCase());
+    claimedRanges.push(range);
+    accepted.push(range);
   }
+  const hits = accepted.length;
   const density = hits / units;
   const points = Math.min(group.max, density * group.scale);
   return { id: group.id, label: group.label, hits, points };
@@ -379,9 +437,10 @@ export function scoreText(text: string, lang: Lang): AiScore {
 
   const groups = lang === "zh" ? ZH_PHRASES : EN_PHRASES;
   const parallel = lang === "zh" ? PARALLEL_ZH : PARALLEL_EN;
+  const claimedPhraseRanges: TextRange[] = [];
 
   const signals: ScoreSignal[] = [
-    ...groups.map((g) => phraseGroupScore(g, clean, sentences, units)),
+    ...groups.map((g) => phraseGroupScore(g, clean, units, claimedPhraseRanges)),
     regexGroupScore(parallel, clean, units),
     regexGroupScore(MARKDOWN, clean, units),
     uniformitySignal(sentences, lang),
