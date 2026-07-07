@@ -1664,74 +1664,44 @@ footer.hint {
   }
 }
 
-/* ============ 公众号排版 (gzh) ============ */
-.gzh-import-row {
+/* ============ 公众号排版（生成文章编辑器内嵌面板） ============ */
+.gzh-panel {
+  margin-bottom: 16px;
+  padding: 14px 18px;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-sm);
+}
+
+.gzh-panel-row {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-  margin-top: 4px;
 }
 
-.gzh-count {
-  margin-left: auto;
+.gzh-panel-row .styleselect {
+  margin: 0;
+}
+
+.gzh-panel-title {
+  color: var(--ink-strong);
+  font-size: 14.5px;
+  margin-right: 2px;
+}
+
+.gzh-scene {
+  margin: 8px 0 0;
   font-size: 12.5px;
-}
-
-.gzh-textarea {
-  min-height: 220px;
-  resize: vertical;
-  line-height: 1.7;
-  font-size: 14px;
-}
-
-.gzh-theme-grid {
-  margin-top: 4px;
-}
-
-.gzh-theme-name {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.gzh-swatch {
-  display: inline-block;
-  width: 14px;
-  height: 14px;
-  border-radius: 5px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  flex: none;
-}
-
-.gzh-action-row {
-  align-items: flex-end;
-  gap: 14px;
-}
-
-.gzh-author {
-  flex: 1;
-  min-width: 220px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.gzh-author .text-input {
-  margin-top: 0;
 }
 
 .gzh-result-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
-}
-
-.gzh-result-actions {
-  display: flex;
-  gap: 10px;
+  margin-top: 12px;
 }
 
 .gzh-validation {

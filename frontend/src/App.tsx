@@ -1,10 +1,9 @@
 import { useStore } from "./lib/store.js";
 import UploadPanel from "./components/upload/UploadPanel.js";
 import ArticleGenerator from "./components/generate/ArticleGenerator.js";
-import GzhFormatter from "./components/gzh/GzhFormatter.js";
 import DocEditor from "./components/editor/DocEditor.js";
 import ScoreBar from "./components/editor/ScoreBar.js";
-import { ChatLogo, GzhIcon, Sparkle, WordIcon } from "./components/common/icons.js";
+import { ChatLogo, Sparkle, WordIcon } from "./components/common/icons.js";
 import ProgressBanner from "./components/common/ProgressBanner.js";
 import { messages } from "./lib/i18n.js";
 
@@ -14,11 +13,8 @@ export default function App() {
   const t = messages[lang];
   const rewriteStep = mode === "rewrite" ? step : workspaces.rewrite.step;
   const generateStep = mode === "generate" ? step : workspaces.generate.step;
-  const heroTitle =
-    mode === "rewrite" ? t.heroRewriteTitle : mode === "generate" ? t.heroGenerateTitle : t.heroGzhTitle;
-  const heroSub = mode === "rewrite" ? t.heroRewriteSub : mode === "generate" ? t.heroGenerateSub : t.heroGzhSub;
 
-  function selectMode(next: "rewrite" | "generate" | "gzh") {
+  function selectMode(next: "rewrite" | "generate") {
     setMode(next);
   }
 
@@ -55,15 +51,6 @@ export default function App() {
             </span>
             {t.modeGenerate}
           </button>
-          <button
-            className={`side-item${mode === "gzh" ? " active" : ""}`}
-            onClick={() => selectMode("gzh")}
-          >
-            <span className="side-icon">
-              <GzhIcon />
-            </span>
-            {t.modeGzh}
-          </button>
         </nav>
 
         <div className="side-foot">
@@ -76,8 +63,8 @@ export default function App() {
       <div className="main-pane">
         {step === "upload" ? (
           <header className="hero">
-            <h1 className="hero-title">{heroTitle}</h1>
-            <p className="hero-sub">{heroSub}</p>
+            <h1 className="hero-title">{mode === "rewrite" ? t.heroRewriteTitle : t.heroGenerateTitle}</h1>
+            <p className="hero-sub">{mode === "rewrite" ? t.heroRewriteSub : t.heroGenerateSub}</p>
           </header>
         ) : (
           <header className="page-head">
@@ -110,9 +97,6 @@ export default function App() {
           </section>
           <section hidden={mode !== "generate"}>
             {generateStep === "upload" ? <ArticleGenerator /> : mode === "generate" ? <DocEditor /> : null}
-          </section>
-          <section hidden={mode !== "gzh"}>
-            <GzhFormatter />
           </section>
         </main>
 

@@ -2,32 +2,30 @@ import { useEffect, useRef, useState } from "react";
 import {
   fetchGzhThemes,
   formatGzhArticle,
-  type ArticleRenderBlockDTO,
   type GzhFormatResponseDTO,
   type GzhThemeDTO,
-  type ParagraphDTO,
 } from "../../lib/api.js";
+import { paragraphsToMarkdown, renderBlocksToMarkdown } from "../../lib/gzhMarkdown.js";
 import { useStore } from "../../lib/store.js";
 import { Sparkle } from "../common/icons.js";
 import ProgressBanner from "../common/ProgressBanner.js";
 import { messages } from "../../lib/i18n.js";
 
 /**
- * "公众号排版" view: paste/import an article → pick a theme → format it into
- * WeChat-editor-ready HTML with live preview, one-click rich-text copy, and
- * an HTML download (integrated from gzh-design-skill).
+ * Inline 公众号排版 panel shown above the generated article: pick a theme,
+ * auto-format the current document, then copy the rich text or download HTML.
  */
-export default function GzhFormatter() {
+export default function GzhExportPanel() {
   const lang = useStore((s) => s.lang);
-  const rewriteWs = useStore((s) => (s.mode === "rewrite" ? null : s.workspaces.rewrite));
-  const generateWs = useStore((s) => (s.mode === "generate" ? null : s.workspaces.generate));
+  const paragraphs = useStore((s) => s.paragraphs);
+  const renderBlocks = useStore((s) => s.renderBlocks);
+  const titleIndex = useStore((s) => s.titleIndex);
+  const globalBusy = useStore((s) => s.busy);
   const t = messages[lang];
 
   const [themes, setThemes] = useState<GzhThemeDTO[]>([]);
   const [themeId, setThemeId] = useState("");
-  const [markdown, setMarkdown] = useState("");
-  const [author, setAuthor] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [working, setWorking] = useState(false);
   const [progress, setProgress] = useState<{ task: "gzhFormat"; startedAt: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<GzhFormatResponseDTO | null>(null);
@@ -41,41 +39,24 @@ export default function GzhFormatter() {
     });
   }, [lang]);
 
-  const rewriteReady = Boolean(rewriteWs && rewriteWs.paragraphs.length);
-  const generateReady = Boolean(generateWs && (generateWs.renderBlocks?.length || generateWs.paragraphs.length));
-
-  function importRewrite() {
-    if (!rewriteWs) return;
-    setMarkdown(paragraphsToMarkdown(rewriteWs.paragraphs, rewriteWs.titleIndex));
-    setError(null);
-  }
-
-  function importGenerate() {
-    if (!generateWs) return;
-    setMarkdown(
-      generateWs.renderBlocks?.length
-        ? renderBlocksToMarkdown(generateWs.renderBlocks, generateWs.paragraphs)
-        : paragraphsToMarkdown(generateWs.paragraphs, generateWs.titleIndex)
-    );
-    setError(null);
+  function buildMarkdown(): string {
+    return renderBlocks?.length
+      ? renderBlocksToMarkdown(renderBlocks, paragraphs)
+      : paragraphsToMarkdown(paragraphs, titleIndex);
   }
 
   async function format() {
-    if (!markdown.trim()) {
-      setError(t.gzhEmptyErr);
-      return;
-    }
-    setBusy(true);
+    setWorking(true);
     setError(null);
     setResult(null);
     setCopied(null);
     setProgress({ task: "gzhFormat", startedAt: Date.now() });
     try {
-      setResult(await formatGzhArticle(markdown, themeId, author.trim(), lang));
+      setResult(await formatGzhArticle(buildMarkdown(), themeId, "", lang));
     } catch (e) {
       setError((e as Error).message);
     } finally {
-      setBusy(false);
+      setWorking(false);
       setProgress(null);
     }
   }
@@ -87,7 +68,7 @@ export default function GzhFormatter() {
         await navigator.clipboard.write([
           new ClipboardItem({
             "text/html": new Blob([result.html], { type: "text/html" }),
-            "text/plain": new Blob([markdown], { type: "text/plain" }),
+            "text/plain": new Blob([buildMarkdown()], { type: "text/plain" }),
           }),
         ]);
         setCopied("ok");
@@ -131,85 +112,48 @@ export default function GzhFormatter() {
     URL.revokeObjectURL(url);
   }
 
+  const isBusy = working || Boolean(globalBusy);
   const validation = result?.validation;
+  const selectedTheme = themes.find((x) => x.id === themeId);
 
   return (
-    <div className="generator">
-      <section className="step lavender">
-        <div className="step-head">
-          <span className="badge lavender">1</span>
-          <h2>{t.gzhStep1}</h2>
-        </div>
-        <div className="gzh-import-row">
-          <button className="ghost" disabled={!rewriteReady || busy} onClick={importRewrite}>
-            {t.gzhImportRewrite}
-          </button>
-          <button className="ghost" disabled={!generateReady || busy} onClick={importGenerate}>
-            {t.gzhImportGenerate}
-          </button>
-          <span className="hint gzh-count">{t.gzhCharCount(markdown.length)}</span>
-        </div>
-        <textarea
-          className="text-input gzh-textarea"
-          value={markdown}
-          onChange={(e) => {
-            setMarkdown(e.target.value);
-            setError(null);
-          }}
-          placeholder={t.gzhPastePlaceholder}
-          rows={10}
-          spellCheck={false}
-        />
-        <p className="hint pick-desc">{t.gzhPasteTip}</p>
-      </section>
-
-      <section className="step mint">
-        <div className="step-head">
-          <span className="badge mint">2</span>
-          <h2>{t.gzhStep2}</h2>
-        </div>
-        <div className="domain-grid gzh-theme-grid">
+    <section className="gzh-panel">
+      <div className="gzh-panel-row">
+        <strong className="gzh-panel-title">{t.gzhPanelTitle}</strong>
+        <select
+          className="styleselect compact"
+          value={themeId}
+          disabled={isBusy}
+          onChange={(e) => setThemeId(e.target.value)}
+        >
           {themes.map((theme) => (
-            <button
-              key={theme.id}
-              className={`domain-card gzh-theme-card${themeId === theme.id ? " active" : ""}`}
-              onClick={() => setThemeId(theme.id)}
-            >
-              <span className="gzh-theme-name">
-                <span className="gzh-swatch" style={{ background: theme.primary }} />
-                {theme.accent && <span className="gzh-swatch" style={{ background: theme.accent }} />}
-                {theme.name}
-              </span>
-              <small>{theme.scene}</small>
-            </button>
+            <option key={theme.id} value={theme.id}>
+              {theme.name}
+            </option>
           ))}
-        </div>
-        <div className="generator-row gzh-action-row">
-          <label className="gzh-author">
-            <span className="hint">{t.gzhAuthorLabel}</span>
-            <input
-              className="text-input"
-              value={author}
-              maxLength={24}
-              onChange={(e) => setAuthor(e.target.value)}
-              placeholder={t.gzhAuthorPlaceholder}
-            />
-          </label>
-          <button className="primary" disabled={busy || !markdown.trim()} onClick={() => void format()}>
-            <Sparkle />
-            {busy ? t.gzhFormatting : t.gzhFormatBtn}
-          </button>
-        </div>
-        {error && <div className="error topic-error">{error}</div>}
-        {busy && progress && <ProgressBanner busy={t.gzhFormatting} progress={progress} lang={lang} />}
-      </section>
-
+        </select>
+        <button className="primary" disabled={isBusy || !paragraphs.length} onClick={() => void format()}>
+          <Sparkle />
+          {working ? t.gzhFormatting : t.gzhFormatBtn}
+        </button>
+        {result && (
+          <>
+            <button className="primary" onClick={() => void copyToClipboard()}>
+              {t.gzhCopyBtn}
+            </button>
+            <button className="ghost" onClick={downloadHtml}>
+              {t.gzhDownloadBtn}
+            </button>
+          </>
+        )}
+      </div>
+      {selectedTheme && !result && !working && <p className="hint gzh-scene">{selectedTheme.scene}</p>}
+      {error && <div className="error topic-error">{error}</div>}
+      {working && progress && <ProgressBanner busy={t.gzhFormatting} progress={progress} lang={lang} />}
+      {copied === "ok" && <div className="banner busy gzh-toast-ok">{t.gzhCopied}</div>}
+      {copied === "fail" && <div className="error topic-error">{t.gzhCopyFail}</div>}
       {result && (
-        <section className="step gzh-result">
-          <div className="step-head">
-            <span className="badge lavender">3</span>
-            <h2>{t.gzhResultTitle}</h2>
-          </div>
+        <>
           <div className="gzh-result-bar">
             <span
               className={`gzh-validation ${
@@ -222,17 +166,8 @@ export default function GzhFormatter() {
                   ? t.gzhValidationWarn(validation.warnings.length)
                   : t.gzhValidationOk}
             </span>
-            <div className="gzh-result-actions">
-              <button className="primary" onClick={copyToClipboard}>
-                {t.gzhCopyBtn}
-              </button>
-              <button className="ghost" onClick={downloadHtml}>
-                {t.gzhDownloadBtn}
-              </button>
-            </div>
+            <span className="hint">{t.gzhPreviewNote}</span>
           </div>
-          {copied === "ok" && <div className="banner busy gzh-toast-ok">{t.gzhCopied}</div>}
-          {copied === "fail" && <div className="error topic-error">{t.gzhCopyFail}</div>}
           {validation && (validation.errors.length > 0 || validation.warnings.length > 0) && (
             <details className="style-box gzh-issues">
               <summary>
@@ -252,62 +187,17 @@ export default function GzhFormatter() {
               </ul>
             </details>
           )}
-          <p className="hint pick-desc">{t.gzhPreviewNote}</p>
           <iframe
             ref={frameRef}
             className="gzh-preview"
-            title={t.gzhResultTitle}
+            title={t.gzhPanelTitle}
             sandbox="allow-same-origin"
             srcDoc={buildPreviewDoc(result.html)}
           />
-        </section>
+        </>
       )}
-    </div>
+    </section>
   );
-}
-
-/** Convert editor paragraphs (rewrite workspace) back to Markdown. */
-function paragraphsToMarkdown(paragraphs: ParagraphDTO[], titleIndex: number): string {
-  const lines: string[] = [];
-  for (const p of paragraphs) {
-    const text = p.sentences.join("").trim();
-    if (!text) continue;
-    if (p.kind === "heading1" || p.index === titleIndex) lines.push(`# ${text}`);
-    else if (p.kind === "heading2") lines.push(`## ${text}`);
-    else if (p.kind === "heading3") lines.push(`### ${text}`);
-    else if (p.kind === "list") lines.push(`- ${text}`);
-    else lines.push(text);
-  }
-  return lines.join("\n\n");
-}
-
-/** Convert generated-article render blocks (with any manual edits) to Markdown. */
-function renderBlocksToMarkdown(blocks: ArticleRenderBlockDTO[], paragraphs: ParagraphDTO[]): string {
-  const edited = new Map(paragraphs.map((p) => [p.index, p.sentences.join("").trim()]));
-  const lines: string[] = [];
-  for (const b of blocks) {
-    if (b.type === "paragraph") {
-      const text = (b.paragraphIndex !== undefined ? edited.get(b.paragraphIndex) : undefined) ?? b.text.trim();
-      if (!text) continue;
-      if (b.kind === "heading1") lines.push(`# ${text}`);
-      else if (b.kind === "heading2") lines.push(`## ${text}`);
-      else if (b.kind === "heading3") lines.push(`### ${text}`);
-      else if (b.kind === "list") lines.push(`- ${text}`);
-      else lines.push(text);
-    } else if (b.type === "figure") {
-      if (b.imageUrl) lines.push(`![${b.caption || b.title}](${b.imageUrl})`);
-      else lines.push(`【插入图表：${b.title}${b.caption ? `——${b.caption}` : ""}】`);
-    } else if (b.type === "table") {
-      const header = `| ${b.columns.join(" | ")} |`;
-      const divider = `| ${b.columns.map(() => "---").join(" | ")} |`;
-      const rows = b.rows.map((r) => `| ${r.join(" | ")} |`);
-      lines.push(`### ${b.title}`, [header, divider, ...rows].join("\n"));
-      if (b.note) lines.push(`> ${b.note}`);
-    } else if (b.type === "references") {
-      lines.push(`## ${b.title}`, b.items.map((item) => `- ${item}`).join("\n"));
-    }
-  }
-  return lines.join("\n\n");
 }
 
 /** Minimal same-origin preview shell; `#gzh-content` is what gets copied. */

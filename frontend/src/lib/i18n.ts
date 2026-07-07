@@ -35,13 +35,10 @@ export interface Dict {
   heroRewriteSub: string;
   heroGenerateTitle: string;
   heroGenerateSub: string;
-  heroGzhTitle: string;
-  heroGzhSub: string;
   editorTitle: string;
   // header
   modeRewrite: string;
   modeGenerate: string;
-  modeGzh: string;
   polishAll: string;
   exportWord: string;
   restart: string;
@@ -81,20 +78,10 @@ export interface Dict {
   sourceCount: (n: number) => string;
   unavailableSources: (list: string) => string;
   generateArticleBtn: string;
-  // gzh formatter (公众号排版)
-  gzhStep1: string;
-  gzhStep2: string;
-  gzhResultTitle: string;
-  gzhPastePlaceholder: string;
-  gzhPasteTip: string;
-  gzhImportRewrite: string;
-  gzhImportGenerate: string;
-  gzhCharCount: (n: number) => string;
-  gzhAuthorLabel: string;
-  gzhAuthorPlaceholder: string;
+  // gzh export panel (公众号排版)
+  gzhPanelTitle: string;
   gzhFormatBtn: string;
   gzhFormatting: string;
-  gzhEmptyErr: string;
   gzhCopyBtn: string;
   gzhCopied: string;
   gzhCopyFail: string;
@@ -158,13 +145,9 @@ const en: Dict = {
   heroGenerateTitle: "Source-Backed Articles",
   heroGenerateSub:
     "Generate an article from a title or domain, grounded in live sources such as arXiv papers and news RSS.",
-  heroGzhTitle: "WeChat-Ready Formatting",
-  heroGzhSub:
-    "Turn an article into themed, compliance-checked HTML you can paste straight into the WeChat Official Account editor.",
   editorTitle: "Edit & Polish",
   modeRewrite: "Rewrite Word",
   modeGenerate: "Generate article",
-  modeGzh: "WeChat formatting",
   polishAll: "Polish whole doc (de-AI)",
   exportWord: "Export Word",
   restart: "Start over",
@@ -202,20 +185,9 @@ const en: Dict = {
   sourceCount: (n) => `${n} source${n > 1 ? "s" : ""}`,
   unavailableSources: (list) => `Some sources are unavailable: ${list}`,
   generateArticleBtn: "Generate article",
-  gzhStep1: "Paste or import the article",
-  gzhStep2: "Pick a theme and format",
-  gzhResultTitle: "Formatted result",
-  gzhPastePlaceholder:
-    "Paste Markdown or plain text here: # title, ## section headings, > opening quote, ![caption](image URL)…",
-  gzhPasteTip: "Markdown works best (# title / ## sections); plain text is auto-structured.",
-  gzhImportRewrite: "Import from Rewrite",
-  gzhImportGenerate: "Import from Generate",
-  gzhCharCount: (n) => `${n} chars`,
-  gzhAuthorLabel: "Byline (optional)",
-  gzhAuthorPlaceholder: "Shown in the footer signature; leave empty to omit",
-  gzhFormatBtn: "Format for WeChat",
+  gzhPanelTitle: "WeChat formatting",
+  gzhFormatBtn: "Auto-format",
   gzhFormatting: "Formatting…",
-  gzhEmptyErr: "Please paste or import an article first",
   gzhCopyBtn: "Copy to WeChat editor",
   gzhCopied: "Copied! Paste with Ctrl/⌘+V in the WeChat editor",
   gzhCopyFail: "Auto-copy failed — select all inside the preview and copy manually",
@@ -306,12 +278,9 @@ const zh: Dict = {
   heroRewriteSub: "把 AI 味很重的稿子改写成更像真人写的文字。上传 Word，逐句润色，一键导出。",
   heroGenerateTitle: "AI 文章生成",
   heroGenerateSub: "按标题或领域生成文章，自动引用 arXiv 论文与新闻 RSS 等实时资料。",
-  heroGzhTitle: "公众号一键排版",
-  heroGzhSub: "把文章转成可直接粘贴进微信公众号编辑器的精美排版：主题组件、关键词标记、平台合规校验。",
   editorTitle: "编辑与润色",
   modeRewrite: "改写 Word",
   modeGenerate: "生成文章",
-  modeGzh: "公众号排版",
   polishAll: "整篇润色（去 AI 味）",
   exportWord: "导出 Word",
   restart: "重新开始",
@@ -349,19 +318,9 @@ const zh: Dict = {
   sourceCount: (n) => `${n} 条来源`,
   unavailableSources: (list) => `部分来源暂不可用：${list}`,
   generateArticleBtn: "一键生成文章",
-  gzhStep1: "粘贴或带入文章",
-  gzhStep2: "选择主题并排版",
-  gzhResultTitle: "排版结果",
-  gzhPastePlaceholder: "在这里粘贴 Markdown 或纯文本：# 标题、## 章节标题、> 开头引言、![说明](图片URL)…",
-  gzhPasteTip: "推荐 Markdown（# 标题 / ## 章节）；纯文本会自动推断结构。",
-  gzhImportRewrite: "带入改写结果",
-  gzhImportGenerate: "带入生成的文章",
-  gzhCharCount: (n) => `${n} 字`,
-  gzhAuthorLabel: "署名（可选）",
-  gzhAuthorPlaceholder: "用于文末作者签名区；留空则不生成签名",
-  gzhFormatBtn: "一键排版",
+  gzhPanelTitle: "公众号排版",
+  gzhFormatBtn: "自动排版",
   gzhFormatting: "排版中…",
-  gzhEmptyErr: "请先粘贴或带入文章内容",
   gzhCopyBtn: "复制到公众号",
   gzhCopied: "已复制！到公众号编辑器按 Ctrl/⌘+V 粘贴即可",
   gzhCopyFail: "自动复制失败，请在预览里手动全选后复制",

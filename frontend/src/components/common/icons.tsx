@@ -69,17 +69,3 @@ export function WordIcon({ className = "" }: IconProps) {
 export function SamplesIcon({ className = "" }: IconProps) {
   return <IconImage className={className} src="/icons/samples-3d.png" />;
 }
-
-/** WeChat-green tile with article lines: the 公众号排版 tool icon. */
-export function GzhIcon({ className = "" }: IconProps) {
-  return (
-    <svg className={`icon-img ${className}`.trim()} viewBox="0 0 48 48" aria-hidden="true" focusable="false">
-      <rect x="4" y="4" width="40" height="40" rx="11" fill="#07C160" />
-      <rect x="12" y="13" width="24" height="5" rx="2.5" fill="#fff" />
-      <rect x="12" y="23" width="24" height="3" rx="1.5" fill="#fff" opacity="0.9" />
-      <rect x="12" y="29" width="15" height="3" rx="1.5" fill="#fff" opacity="0.9" />
-      <rect x="30" y="29" width="6" height="3" rx="1.5" fill="#a7f3d0" />
-      <rect x="12" y="35" width="20" height="3" rx="1.5" fill="#fff" opacity="0.65" />
-    </svg>
-  );
-}

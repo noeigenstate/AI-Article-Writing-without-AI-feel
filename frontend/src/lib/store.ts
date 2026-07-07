@@ -20,7 +20,7 @@ import {
 import { getStoredLang, storeLang, messages, type Lang } from "./i18n.js";
 import type { ProgressTask } from "./progress.js";
 
-type Mode = "rewrite" | "generate" | "gzh";
+type Mode = "rewrite" | "generate";
 type Step = "upload" | "ready";
 
 interface WorkspaceState {
@@ -127,8 +127,6 @@ function workspacePatch(s: State, mode: Mode, patch: Partial<WorkspaceState>) {
  */
 const rewriteWorkspace = emptyWorkspace();
 const generateWorkspace = emptyWorkspace();
-// 公众号排版页自身状态在 GzhFormatter 组件内；这里的 workspace 只为 Mode 联合类型完整
-const gzhWorkspace = emptyWorkspace();
 
 export const useStore = create<State>((set, get) => ({
   lang: getStoredLang(),
@@ -139,7 +137,6 @@ export const useStore = create<State>((set, get) => ({
   workspaces: {
     rewrite: rewriteWorkspace,
     generate: generateWorkspace,
-    gzh: gzhWorkspace,
   },
 
   async recomputeScore(mode = get().mode) {

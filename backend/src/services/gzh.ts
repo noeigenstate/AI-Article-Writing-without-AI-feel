@@ -32,7 +32,7 @@ export interface GzhTheme {
 export const GZH_THEMES: GzhTheme[] = [
   {
     id: "moyu-green",
-    name: { zh: "摸鱼绿", en: "Emerald" },
+    name: { zh: "翡翠清新", en: "Emerald Fresh" },
     primary: "#059669",
     scene: {
       zh: "教程、测评、清单、工具盘点（信息密度高，默认推荐）",
@@ -43,7 +43,7 @@ export const GZH_THEMES: GzhTheme[] = [
   },
   {
     id: "red-white",
-    name: { zh: "红白色系", en: "Red & White" },
+    name: { zh: "红白杂志", en: "Red Editorial" },
     primary: "#DC2626",
     scene: {
       zh: "深度分析、观点、力量感话题（经典编辑风，红色克制点睛）",
@@ -54,7 +54,7 @@ export const GZH_THEMES: GzhTheme[] = [
   },
   {
     id: "graphite-minimal",
-    name: { zh: "石墨极简风", en: "Graphite Minimal" },
+    name: { zh: "石墨极简", en: "Graphite Minimal" },
     primary: "#52525B",
     scene: {
       zh: "设计、科技评论、专业观点、高端品牌（极简克制、全灰阶）",
@@ -65,7 +65,7 @@ export const GZH_THEMES: GzhTheme[] = [
   },
   {
     id: "zen-whitespace",
-    name: { zh: "留白禅意风", en: "Zen Whitespace" },
+    name: { zh: "禅意留白", en: "Zen Whitespace" },
     primary: "#4A5D52",
     scene: {
       zh: "禅意冥想、极简生活、深度随笔（呼吸感最强）",
@@ -76,7 +76,7 @@ export const GZH_THEMES: GzhTheme[] = [
   },
   {
     id: "moyu-ticket",
-    name: { zh: "摸鱼票据风", en: "Ticket Stub" },
+    name: { zh: "创意票据", en: "Ticket Stub" },
     primary: "#059669",
     scene: {
       zh: "测评、工具对比、创意评测（票据视觉隐喻，星级+硬阴影卡片）",
@@ -87,7 +87,7 @@ export const GZH_THEMES: GzhTheme[] = [
   },
   {
     id: "olive-journal",
-    name: { zh: "橄榄手记", en: "Olive Journal" },
+    name: { zh: "橄榄内刊", en: "Olive Journal" },
     primary: "#1e1f23",
     accent: "#ed7b2f",
     scene: {
@@ -331,6 +331,7 @@ function buildSystemPrompt(theme: GzhTheme): string {
     '6. 代码/命令/Prompt 用通用库代码块组件：每行一个 <p style="margin:0">，禁用 white-space:pre，缩进用全角空格。',
     "7. 强调小标题用小标签/左竖条（通用库 3a–3e），不要用四周虚线框；主题库明确定义的虚线组件除外。",
     "8. 不得增删原文实质内容：每个段落、每张图、每个列表项都要转换，不得遗漏。",
+    "9. 组件里的示例文案（作者名如“摸鱼小李/甲木”、示例日期、示例标签等）必须替换成本文实际信息：日期用【文章信息】给的当前日期；没有提供署名就删掉作者栏/署名元素，绝不保留示例人名。",
     "",
     "【输出格式】只输出 HTML 片段本身：不要 Markdown 代码围栏，不要任何解释文字，不要 <!DOCTYPE>/<html>/<head>/<body>，也不要主题的全局容器（外层容器由系统统一包裹）。",
     "",
@@ -342,15 +343,19 @@ function buildSystemPrompt(theme: GzhTheme): string {
   ].join("\n");
 }
 
-function buildChunkPrompt(doc: GzhArticleStructure, chunk: GzhChunk): string {
+function buildChunkPrompt(doc: GzhArticleStructure, chunk: GzhChunk, author: string): string {
   const headings = doc.sections
     .filter((s) => s.heading !== undefined)
     .map((s, i) => `${String(i + 1).padStart(2, "0")} ${s.heading}`)
     .join(" / ");
+  const now = new Date();
+  const date = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, "0")}`;
   return [
     "【文章信息】",
     `标题：${doc.title}`,
     headings ? `全部章节：${headings}` : "（本文无章节标题）",
+    `当前日期：${date}`,
+    author ? `署名：${author}` : "署名：（未提供——删除组件中的作者栏/署名元素，不要用示例人名）",
     "",
     `【本次任务】${chunk.task}`,
     chunk.md ? `\n【本段 Markdown】\n${chunk.md}` : "",
@@ -409,13 +414,14 @@ export async function formatGzhArticle(input: GzhFormatInput): Promise<GzhFormat
   }
   const theme = GZH_THEMES.find((t) => t.id === input.themeId) ?? GZH_THEMES[0];
   const doc = parseGzhStructure(markdown);
-  const chunks = buildChunks(doc, input.author?.trim() ?? "");
+  const author = input.author?.trim() ?? "";
+  const chunks = buildChunks(doc, author);
   const system = buildSystemPrompt(theme);
 
   const rendered: string[] = [];
   for (const chunk of chunks) {
     let html = sanitizeChunkHtml(
-      await chat(buildChunkPrompt(doc, chunk), { system, temperature: 0.4, maxTokens: 7000 })
+      await chat(buildChunkPrompt(doc, chunk, author), { system, temperature: 0.4, maxTokens: 7000 })
     );
     if (!html) throw new Error(input.lang === "zh" ? "模型返回为空，请重试" : "Model returned empty output; try again.");
     const check = validateGzhHtml(html);

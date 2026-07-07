@@ -35,7 +35,7 @@ Open-source AI writing workbench for **Word rewriting**, **human-likeness scorin
 - **Learn your style** from uploaded `.docx` or `.txt` samples.
 - **Show progress while the model works** for article writing, whole-document rewriting, title options, and topic generation.
 - **Generate an article from a title or domain** with arXiv papers, RSS news sources, and optional Agent-Reach / Exa web search.
-- **Format articles for the WeChat Official Account editor** with six built-in visual themes, keyword underlining, and a deterministic compliance check — paste the result straight into 公众号.
+- **Auto-format generated articles for the WeChat Official Account editor**: pick a visual theme in the article editor, click Auto-format, then copy the result straight into 公众号 with one click.
 - **Run privately** with any OpenAI-compatible endpoint, including local model servers.
 
 ## Basic Environment
@@ -149,12 +149,11 @@ The Agent-Reach integration currently uses its Exa/mcporter search path as a bro
 
 ## WeChat Formatting (公众号排版)
 
-The third sidebar tool turns a Markdown (or plain-text) article into HTML that survives pasting into the WeChat Official Account editor: inline styles only, every text node wrapped in `<span leaf="">`, no `<div>`/`class`/`id`, full-width punctuation in prose.
+After generating an article, the editor shows a formatting bar: pick a theme from the dropdown, click **Auto-format**, and the article is converted into HTML that survives pasting into the WeChat Official Account editor — inline styles only, every text node wrapped in `<span leaf="">`, no `<div>`/`class`/`id`, full-width punctuation in prose.
 
-- **Six themes** from [gzh-design-skill](https://github.com/isjiamu/gzh-design-skill): 摸鱼绿, 红白色系, 石墨极简风, 留白禅意风, 摸鱼票据风, 橄榄手记. Each theme is a component library (cover, chapter titles, quote cards, signature) that the model assembles per chapter.
-- **Import in one click** from the Rewrite or Generate workspaces, or paste any Markdown.
+- **Six themes** built on [gzh-design-skill](https://github.com/isjiamu/gzh-design-skill) component libraries: 翡翠清新, 红白杂志, 石墨极简, 禅意留白, 创意票据, 橄榄内刊. Each theme defines the cover, chapter titles, quote cards, and signature that the model assembles per chapter.
 - **Compliance validation** is deterministic (ported from the skill's Python validator): forbidden tags/styles are errors, unwrapped text and half-width punctuation are warnings, and failing chunks get one automatic repair pass.
-- **Copy or download**: a live preview renders the exact rich text; “复制到公众号” copies it for direct pasting, and the HTML download is a standalone preview page with its own copy button.
+- **One-click paste**: the live preview renders the exact rich text; “复制到公众号” puts it on the clipboard for direct pasting, and the HTML download is a standalone preview page with its own copy button.
 
 ## Private Local Mode
 
@@ -210,6 +209,13 @@ docs/                design notes
 
 ## License
 
-[MIT](LICENSE) for this project's own code.
+This project's own code is under [MIT](LICENSE).
 
-The WeChat formatting feature integrates theme component libraries and validation rules from [gzh-design-skill](https://github.com/isjiamu/gzh-design-skill) by 甲木 (Jiamu) × 摸鱼小李 (Moyu Xiaoli), which is licensed under **AGPL-3.0** (see `backend/assets/gzh/LICENSE`). If you redistribute this project or offer it as a public network service with that feature included, review the AGPL-3.0 obligations first.
+> **⚠️ Important — bundled AGPL-3.0 content.** The WeChat formatting feature integrates theme component libraries and validation rules from [gzh-design-skill](https://github.com/isjiamu/gzh-design-skill) by 甲木 (Jiamu) × 摸鱼小李 (Moyu Xiaoli), licensed under **AGPL-3.0** (full text: `backend/assets/gzh/LICENSE`).
+
+What that means in practice:
+
+- **Personal / internal use**: no extra obligations — use and modify freely.
+- **Attribution**: keep the upstream copyright notice and `backend/assets/gzh/LICENSE` in place (already done here).
+- **Redistributing this repo (including a public fork)**: the bundled theme libraries stay AGPL-3.0, and a combined work that includes them must be conveyed under AGPL-3.0 terms. Practically, either license your distribution as AGPL-3.0 overall (MIT code can be included in an AGPL whole), remove/replace the `backend/assets/gzh/` content, or obtain separate permission from the upstream authors.
+- **Offering this app as a public network service** (AGPL §13): you must offer users of that service the complete corresponding source of your running (possibly modified) version.
