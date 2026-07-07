@@ -245,6 +245,42 @@ export async function fetchAlternatives(
   return (await res.json()).alternatives as string[];
 }
 
+/** A registered 公众号 formatting theme (color swatch + usage scene). */
+export interface GzhThemeDTO {
+  id: string;
+  name: string;
+  primary: string;
+  accent?: string;
+  scene: string;
+}
+
+/** Result of formatting an article into WeChat-ready HTML. */
+export interface GzhFormatResponseDTO {
+  html: string;
+  title: string;
+  themeId: string;
+  themeName: string;
+  validation: { errors: string[]; warnings: string[]; leafCount: number };
+}
+
+/** Fetch the registered 公众号 formatting themes (empty array on failure). */
+export async function fetchGzhThemes(lang: Lang) {
+  const res = await fetch(`${BASE}/gzh/themes?lang=${lang}`);
+  if (!res.ok) return [] as GzhThemeDTO[];
+  return (await res.json()).themes as GzhThemeDTO[];
+}
+
+/** Format a Markdown article into paste-ready 公众号 HTML. */
+export async function formatGzhArticle(markdown: string, themeId: string, author: string, lang: Lang = "en") {
+  const res = await fetch(`${BASE}/gzh/format`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ markdown, themeId, author, lang }),
+  });
+  if (!res.ok) throw await apiError(res, "Formatting failed");
+  return res.json() as Promise<GzhFormatResponseDTO>;
+}
+
 /** Export the edited document to docx and trigger a browser download. */
 export async function exportDoc(docId: string, texts: Record<number, string>) {
   const res = await fetch(`${BASE}/export`, {

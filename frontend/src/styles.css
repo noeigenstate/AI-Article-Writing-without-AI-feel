@@ -1663,3 +1663,127 @@ footer.hint {
     width: 100%;
   }
 }
+
+/* ============ 公众号排版 (gzh) ============ */
+.gzh-import-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.gzh-count {
+  margin-left: auto;
+  font-size: 12.5px;
+}
+
+.gzh-textarea {
+  min-height: 220px;
+  resize: vertical;
+  line-height: 1.7;
+  font-size: 14px;
+}
+
+.gzh-theme-grid {
+  margin-top: 4px;
+}
+
+.gzh-theme-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.gzh-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 5px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  flex: none;
+}
+
+.gzh-action-row {
+  align-items: flex-end;
+  gap: 14px;
+}
+
+.gzh-author {
+  flex: 1;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gzh-author .text-input {
+  margin-top: 0;
+}
+
+.gzh-result-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.gzh-result-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.gzh-validation {
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 999px;
+}
+
+.gzh-validation.ok {
+  color: #047857;
+  background: #d1fae5;
+}
+
+.gzh-validation.warn {
+  color: #92400e;
+  background: #fef3c7;
+}
+
+.gzh-validation.bad {
+  color: #b91c1c;
+  background: #fee2e2;
+}
+
+.gzh-toast-ok {
+  margin-top: 12px;
+}
+
+.gzh-issues ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+.gzh-issue-err {
+  color: #b91c1c;
+}
+
+.gzh-preview {
+  width: 100%;
+  height: 620px;
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: #eef0f2;
+  box-shadow: var(--shadow-sm);
+}
+
+@media (max-width: 860px) {
+  .gzh-preview {
+    height: 480px;
+  }
+}

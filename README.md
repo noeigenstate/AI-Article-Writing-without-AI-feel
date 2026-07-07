@@ -4,7 +4,7 @@
 
 **Turn AI-shaped drafts into writing that reads like a person wrote it.**
 
-Open-source AI writing workbench for **Word rewriting**, **human-likeness scoring**, and **source-backed article generation**. It works in English and Chinese.
+Open-source AI writing workbench for **Word rewriting**, **human-likeness scoring**, **source-backed article generation**, and **WeChat Official Account formatting**. It works in English and Chinese.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-22a06b.svg)](LICENSE)
 ![Node](https://img.shields.io/badge/Node-%E2%89%A518-339933?logo=node.js&logoColor=white)
@@ -19,12 +19,12 @@ Open-source AI writing workbench for **Word rewriting**, **human-likeness scorin
 
 ## At A Glance
 
-| Rewrite Word | Generate Articles |
-| --- | --- |
-| <img src="assets/screenshots/01-rewrite.png" alt="Rewrite Word page" /> | <img src="assets/screenshots/02-generate.png" alt="Generate article page" /> |
+| Rewrite Word | Generate Articles | WeChat Formatting |
+| --- | --- | --- |
+| <img src="assets/screenshots/01-rewrite.png" alt="Rewrite Word page" /> | <img src="assets/screenshots/02-generate.png" alt="Generate article page" /> | <img src="assets/screenshots/03-gzh.png" alt="WeChat formatting page" /> |
 
 <div align="center">
-  <sub>A light SaaS-style workspace: Word rewriting, progress logs, and source-backed article generation behind one sidebar.</sub>
+  <sub>A light SaaS-style workspace: Word rewriting, source-backed article generation, and WeChat-ready formatting behind one sidebar.</sub>
 </div>
 
 ## What It Does
@@ -35,6 +35,7 @@ Open-source AI writing workbench for **Word rewriting**, **human-likeness scorin
 - **Learn your style** from uploaded `.docx` or `.txt` samples.
 - **Show progress while the model works** for article writing, whole-document rewriting, title options, and topic generation.
 - **Generate an article from a title or domain** with arXiv papers, RSS news sources, and optional Agent-Reach / Exa web search.
+- **Format articles for the WeChat Official Account editor** with six built-in visual themes, keyword underlining, and a deterministic compliance check — paste the result straight into 公众号.
 - **Run privately** with any OpenAI-compatible endpoint, including local model servers.
 
 ## Basic Environment
@@ -146,6 +147,15 @@ Current enabled RSS sources include NPR World, France 24, CNBC World, UN News, T
 
 The Agent-Reach integration currently uses its Exa/mcporter search path as a broad web source. Reddit, X/Twitter, Xiaohongshu, and similar logged-in social channels require credentials/cookies and are intentionally not switched on automatically.
 
+## WeChat Formatting (公众号排版)
+
+The third sidebar tool turns a Markdown (or plain-text) article into HTML that survives pasting into the WeChat Official Account editor: inline styles only, every text node wrapped in `<span leaf="">`, no `<div>`/`class`/`id`, full-width punctuation in prose.
+
+- **Six themes** from [gzh-design-skill](https://github.com/isjiamu/gzh-design-skill): 摸鱼绿, 红白色系, 石墨极简风, 留白禅意风, 摸鱼票据风, 橄榄手记. Each theme is a component library (cover, chapter titles, quote cards, signature) that the model assembles per chapter.
+- **Import in one click** from the Rewrite or Generate workspaces, or paste any Markdown.
+- **Compliance validation** is deterministic (ported from the skill's Python validator): forbidden tags/styles are errors, unwrapped text and half-width punctuation are warnings, and failing chunks get one automatic repair pass.
+- **Copy or download**: a live preview renders the exact rich text; “复制到公众号” copies it for direct pasting, and the HTML download is a standalone preview page with its own copy button.
+
 ## Private Local Mode
 
 Point the backend at a local OpenAI-compatible server:
@@ -178,11 +188,12 @@ npm run test:progress
 ```text
 backend/
   src/routes/      API endpoints
-  src/services/    rewrite, article, docx, score, research
+  src/services/    rewrite, article, docx, score, research, gzh formatting
   src/prompts/     model prompts
+  assets/gzh/      WeChat theme component libraries (from gzh-design-skill)
 
 frontend/
-  src/components/  upload, generate, editor, common UI
+  src/components/  upload, generate, gzh, editor, common UI
   src/lib/         API client, store, i18n
   src/styles.css   light workspace theme (sidebar, hero, cards)
 
@@ -199,4 +210,6 @@ docs/                design notes
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) for this project's own code.
+
+The WeChat formatting feature integrates theme component libraries and validation rules from [gzh-design-skill](https://github.com/isjiamu/gzh-design-skill) by 甲木 (Jiamu) × 摸鱼小李 (Moyu Xiaoli), which is licensed under **AGPL-3.0** (see `backend/assets/gzh/LICENSE`). If you redistribute this project or offer it as a public network service with that feature included, review the AGPL-3.0 obligations first.

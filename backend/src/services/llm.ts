@@ -10,6 +10,8 @@ const client = new OpenAI({
 export interface ChatOptions {
   system?: string;
   temperature?: number;
+  /** Output token cap; set higher for long HTML/document generation. */
+  maxTokens?: number;
 }
 
 /**
@@ -27,6 +29,7 @@ export async function chat(prompt: string, opts: ChatOptions = {}): Promise<stri
   const res = await client.chat.completions.create({
     model: config.llm.model,
     temperature: opts.temperature ?? config.llm.temperature,
+    ...(opts.maxTokens ? { max_tokens: opts.maxTokens } : {}),
     messages,
     stream: false,
     ...deepSeekOptions(),

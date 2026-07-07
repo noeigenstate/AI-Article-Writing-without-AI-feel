@@ -4,7 +4,7 @@
 
 **把 AI 味很重的初稿，改成更像真人写的文字。**
 
-一个开源 AI 写作工作台：支持 **Word 改写**、**人类感评分**、**带资料来源的文章生成**。界面支持中文和英文。
+一个开源 AI 写作工作台：支持 **Word 改写**、**人类感评分**、**带资料来源的文章生成**、**公众号一键排版**。界面支持中文和英文。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-22a06b.svg)](LICENSE)
 ![Node](https://img.shields.io/badge/Node-%E2%89%A518-339933?logo=node.js&logoColor=white)
@@ -19,12 +19,12 @@
 
 ## 一眼看懂
 
-| 改写 Word | 生成文章 |
-| --- | --- |
-| <img src="assets/screenshots/01-rewrite.png" alt="改写 Word 页面" /> | <img src="assets/screenshots/02-generate.png" alt="生成文章页面" /> |
+| 改写 Word | 生成文章 | 公众号排版 |
+| --- | --- | --- |
+| <img src="assets/screenshots/01-rewrite.png" alt="改写 Word 页面" /> | <img src="assets/screenshots/02-generate.png" alt="生成文章页面" /> | <img src="assets/screenshots/03-gzh.png" alt="公众号排版页面" /> |
 
 <div align="center">
-  <sub>清爽的 SaaS 风格工作台：Word 改写、进度日志和带来源文章生成，都在同一个侧边栏导航里。</sub>
+  <sub>清爽的 SaaS 风格工作台：Word 改写、带来源文章生成和公众号排版，都在同一个侧边栏导航里。</sub>
 </div>
 
 ## 它能做什么
@@ -35,6 +35,7 @@
 - **学习你的口吻**：上传 `.docx` 或 `.txt` 范文，让输出更像你的风格。
 - **显示模型工作进度**：生成文章、整篇润色、标题候选、选题生成都会显示百分比、当前阶段和日志。
 - **按标题或领域生成文章**：自动查 arXiv 论文、新闻 RSS，并可选接入 Agent-Reach / Exa 全网搜索，带资料、图表和引用。
+- **公众号一键排版**：六套内置主题 + 关键词下划线标记 + 平台合规校验，排版结果直接粘贴进微信公众号编辑器，样式不丢。
 - **可以本地私有运行**：支持 Ollama、LM Studio、vLLM 等 OpenAI 兼容接口。
 
 ## 基础环境
@@ -146,6 +147,15 @@ npm run dev
 
 目前 Agent-Reach 集成的是 Exa/mcporter 搜索路径，用作宽泛网页资料来源。Reddit、X/Twitter、小红书等需要登录态的社交来源，需要单独配置凭证/cookies，因此不会默认开启。
 
+## 公众号排版
+
+侧边栏第三个工具：把 Markdown（或纯文本）文章转成能安全粘贴进微信公众号编辑器的 HTML——全部内联样式、文字节点 `<span leaf="">` 包裹、不用 `<div>`/`class`/`id`、正文全角标点。
+
+- **六套主题** 来自 [gzh-design-skill](https://github.com/isjiamu/gzh-design-skill)：摸鱼绿、红白色系、石墨极简风、留白禅意风、摸鱼票据风、橄榄手记。每套主题是一个组件库（封面、章节标题、引言卡、签名区），模型按章节取组件装配。
+- **一键带入**：改写结果或生成的文章可以直接带入排版，也可以粘贴任意 Markdown。
+- **确定性合规校验**（移植自该 skill 的 Python 校验器）：禁用标签/样式记为错误，漏包裹和半角标点记为提醒，违规块自动修复一轮。
+- **复制或下载**：预览即最终效果，点「复制到公众号」直接复制富文本去粘贴；下载的 HTML 是自带复制按钮的独立预览页。
+
 ## 本地私有模式
 
 把 `backend/.env` 指向本地 OpenAI 兼容服务：
@@ -178,11 +188,12 @@ npm run test:progress
 ```text
 backend/
   src/routes/      API 路由
-  src/services/    改写、文章、Word、评分、资料检索
+  src/services/    改写、文章、Word、评分、资料检索、公众号排版
   src/prompts/     模型提示词
+  assets/gzh/      公众号主题组件库（来自 gzh-design-skill）
 
 frontend/
-  src/components/  上传、生成、编辑器、通用组件
+  src/components/  上传、生成、公众号排版、编辑器、通用组件
   src/lib/         API、状态、国际化文案
   src/styles.css   浅色工作台主题（边栏、大标题、卡片）
 
@@ -199,4 +210,6 @@ docs/                设计资料
 
 ## 许可证
 
-[MIT](LICENSE)
+本项目自身代码：[MIT](LICENSE)。
+
+公众号排版功能整合了 [gzh-design-skill](https://github.com/isjiamu/gzh-design-skill)（作者：甲木 × 摸鱼小李）的主题组件库和校验规则，该项目采用 **AGPL-3.0** 协议（见 `backend/assets/gzh/LICENSE`）。若你要连同该功能再分发本项目、或把它作为公开网络服务提供，请先确认 AGPL-3.0 的相应义务。

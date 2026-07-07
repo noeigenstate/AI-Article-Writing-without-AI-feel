@@ -35,10 +35,13 @@ export interface Dict {
   heroRewriteSub: string;
   heroGenerateTitle: string;
   heroGenerateSub: string;
+  heroGzhTitle: string;
+  heroGzhSub: string;
   editorTitle: string;
   // header
   modeRewrite: string;
   modeGenerate: string;
+  modeGzh: string;
   polishAll: string;
   exportWord: string;
   restart: string;
@@ -78,6 +81,28 @@ export interface Dict {
   sourceCount: (n: number) => string;
   unavailableSources: (list: string) => string;
   generateArticleBtn: string;
+  // gzh formatter (公众号排版)
+  gzhStep1: string;
+  gzhStep2: string;
+  gzhResultTitle: string;
+  gzhPastePlaceholder: string;
+  gzhPasteTip: string;
+  gzhImportRewrite: string;
+  gzhImportGenerate: string;
+  gzhCharCount: (n: number) => string;
+  gzhAuthorLabel: string;
+  gzhAuthorPlaceholder: string;
+  gzhFormatBtn: string;
+  gzhFormatting: string;
+  gzhEmptyErr: string;
+  gzhCopyBtn: string;
+  gzhCopied: string;
+  gzhCopyFail: string;
+  gzhDownloadBtn: string;
+  gzhValidationOk: string;
+  gzhValidationWarn: (n: number) => string;
+  gzhValidationErr: (n: number) => string;
+  gzhPreviewNote: string;
   // doc editor / popover
   clickRetitle: string;
   clickRephrase: string;
@@ -117,6 +142,7 @@ export interface Dict {
   progressArticleTopicSteps: string[];
   progressRewriteSteps: string[];
   progressTitleCandidateSteps: string[];
+  progressGzhSteps: string[];
   progressPercent: (n: number) => string;
   // locale for dates
   dateLocale: string;
@@ -132,9 +158,13 @@ const en: Dict = {
   heroGenerateTitle: "Source-Backed Articles",
   heroGenerateSub:
     "Generate an article from a title or domain, grounded in live sources such as arXiv papers and news RSS.",
+  heroGzhTitle: "WeChat-Ready Formatting",
+  heroGzhSub:
+    "Turn an article into themed, compliance-checked HTML you can paste straight into the WeChat Official Account editor.",
   editorTitle: "Edit & Polish",
   modeRewrite: "Rewrite Word",
   modeGenerate: "Generate article",
+  modeGzh: "WeChat formatting",
   polishAll: "Polish whole doc (de-AI)",
   exportWord: "Export Word",
   restart: "Start over",
@@ -172,6 +202,28 @@ const en: Dict = {
   sourceCount: (n) => `${n} source${n > 1 ? "s" : ""}`,
   unavailableSources: (list) => `Some sources are unavailable: ${list}`,
   generateArticleBtn: "Generate article",
+  gzhStep1: "Paste or import the article",
+  gzhStep2: "Pick a theme and format",
+  gzhResultTitle: "Formatted result",
+  gzhPastePlaceholder:
+    "Paste Markdown or plain text here: # title, ## section headings, > opening quote, ![caption](image URL)…",
+  gzhPasteTip: "Markdown works best (# title / ## sections); plain text is auto-structured.",
+  gzhImportRewrite: "Import from Rewrite",
+  gzhImportGenerate: "Import from Generate",
+  gzhCharCount: (n) => `${n} chars`,
+  gzhAuthorLabel: "Byline (optional)",
+  gzhAuthorPlaceholder: "Shown in the footer signature; leave empty to omit",
+  gzhFormatBtn: "Format for WeChat",
+  gzhFormatting: "Formatting…",
+  gzhEmptyErr: "Please paste or import an article first",
+  gzhCopyBtn: "Copy to WeChat editor",
+  gzhCopied: "Copied! Paste with Ctrl/⌘+V in the WeChat editor",
+  gzhCopyFail: "Auto-copy failed — select all inside the preview and copy manually",
+  gzhDownloadBtn: "Download HTML",
+  gzhValidationOk: "Compliance check passed — safe to paste",
+  gzhValidationWarn: (n) => `${n} warning${n > 1 ? "s" : ""} to review`,
+  gzhValidationErr: (n) => `${n} blocking issue${n > 1 ? "s" : ""} found`,
+  gzhPreviewNote: "Preview below renders exactly what gets copied.",
   clickRetitle: "Click to retitle",
   clickRephrase: "Click to rephrase / edit",
   viewSource: "View source",
@@ -235,6 +287,13 @@ const en: Dict = {
     "Checking tone and length",
     "Preparing title choices",
   ],
+  progressGzhSteps: [
+    "Parsing the article structure",
+    "Laying out cover and intro",
+    "Formatting chapters with theme components",
+    "Running the compliance check",
+    "Assembling the final HTML",
+  ],
   progressPercent: (n) => `${n}%`,
   dateLocale: "en-US",
 };
@@ -247,9 +306,12 @@ const zh: Dict = {
   heroRewriteSub: "把 AI 味很重的稿子改写成更像真人写的文字。上传 Word，逐句润色，一键导出。",
   heroGenerateTitle: "AI 文章生成",
   heroGenerateSub: "按标题或领域生成文章，自动引用 arXiv 论文与新闻 RSS 等实时资料。",
+  heroGzhTitle: "公众号一键排版",
+  heroGzhSub: "把文章转成可直接粘贴进微信公众号编辑器的精美排版：主题组件、关键词标记、平台合规校验。",
   editorTitle: "编辑与润色",
   modeRewrite: "改写 Word",
   modeGenerate: "生成文章",
+  modeGzh: "公众号排版",
   polishAll: "整篇润色（去 AI 味）",
   exportWord: "导出 Word",
   restart: "重新开始",
@@ -287,6 +349,27 @@ const zh: Dict = {
   sourceCount: (n) => `${n} 条来源`,
   unavailableSources: (list) => `部分来源暂不可用：${list}`,
   generateArticleBtn: "一键生成文章",
+  gzhStep1: "粘贴或带入文章",
+  gzhStep2: "选择主题并排版",
+  gzhResultTitle: "排版结果",
+  gzhPastePlaceholder: "在这里粘贴 Markdown 或纯文本：# 标题、## 章节标题、> 开头引言、![说明](图片URL)…",
+  gzhPasteTip: "推荐 Markdown（# 标题 / ## 章节）；纯文本会自动推断结构。",
+  gzhImportRewrite: "带入改写结果",
+  gzhImportGenerate: "带入生成的文章",
+  gzhCharCount: (n) => `${n} 字`,
+  gzhAuthorLabel: "署名（可选）",
+  gzhAuthorPlaceholder: "用于文末作者签名区；留空则不生成签名",
+  gzhFormatBtn: "一键排版",
+  gzhFormatting: "排版中…",
+  gzhEmptyErr: "请先粘贴或带入文章内容",
+  gzhCopyBtn: "复制到公众号",
+  gzhCopied: "已复制！到公众号编辑器按 Ctrl/⌘+V 粘贴即可",
+  gzhCopyFail: "自动复制失败，请在预览里手动全选后复制",
+  gzhDownloadBtn: "下载 HTML",
+  gzhValidationOk: "合规校验通过，可直接粘贴",
+  gzhValidationWarn: (n) => `${n} 条提醒建议检查`,
+  gzhValidationErr: (n) => `发现 ${n} 个阻断问题`,
+  gzhPreviewNote: "下方预览即最终复制内容。",
   clickRetitle: "点击重拟标题",
   clickRephrase: "点击换个说法 / 编辑",
   viewSource: "查看来源",
@@ -349,6 +432,13 @@ const zh: Dict = {
     "正在生成标题候选",
     "正在检查语气和长度",
     "正在整理标题选项",
+  ],
+  progressGzhSteps: [
+    "正在解析文章结构",
+    "正在排版封面与引言",
+    "正在按主题组件排版章节",
+    "正在做公众号合规校验",
+    "正在装配完整排版",
   ],
   progressPercent: (n) => `${n}%`,
   dateLocale: "zh-CN",
