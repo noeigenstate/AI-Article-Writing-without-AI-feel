@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useStore } from "../../lib/store.js";
 import { CloudUp, SamplesIcon, WordIcon } from "../common/icons.js";
-import LiquidGlass from "../common/LiquidGlass.js";
 import { messages } from "../../lib/i18n.js";
 
 /** "Rewrite Word" entry view: pick a docx + style/samples, then upload & parse. */
@@ -23,7 +22,7 @@ export default function UploadPanel() {
 
   return (
     <div className="upload">
-      <LiquidGlass className="step peach" radius={26} displacement={34}>
+      <section className="step peach">
         <div className="step-head">
           <span className="badge peach">1</span>
           <h2>{t.uploadTitle}</h2>
@@ -46,9 +45,9 @@ export default function UploadPanel() {
             onChange={(e) => setTarget(e.target.files?.[0] ?? null)}
           />
         </label>
-      </LiquidGlass>
+      </section>
 
-      <LiquidGlass className="step mint" radius={26} displacement={30}>
+      <section className="step mint">
         <div className="step-head">
           <span className="badge mint">2</span>
           <h2>{t.chooseStyleTitle}</h2>
@@ -88,7 +87,7 @@ export default function UploadPanel() {
             onChange={(e) => setRefs(Array.from(e.target.files ?? []))}
           />
         </label>
-      </LiquidGlass>
+      </section>
 
       <div className="row-end">
         <button

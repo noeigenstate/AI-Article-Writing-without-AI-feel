@@ -19,15 +19,13 @@
 
 ## 一眼看懂
 
-<div align="center">
-  <img src="assets/screenshots/demo-generate.gif" alt="Speak Plainly 页面演示" width="820" />
-  <br />
-  <sub>中国古典文房书案风格界面，Word 改写、进度日志和带来源文章生成都在同一个工作台里。</sub>
-</div>
-
 | 改写 Word | 生成文章 |
 | --- | --- |
 | <img src="assets/screenshots/01-rewrite.png" alt="改写 Word 页面" /> | <img src="assets/screenshots/02-generate.png" alt="生成文章页面" /> |
+
+<div align="center">
+  <sub>清爽的 SaaS 风格工作台：Word 改写、进度日志和带来源文章生成，都在同一个侧边栏导航里。</sub>
+</div>
 
 ## 它能做什么
 
@@ -101,7 +99,7 @@ npm run dev
 
 ## 界面风格
 
-当前界面采用当代中文文房书案方向：宣纸底、墨线结构、朱砂主操作、青瓷状态高亮和印章式品牌标识。目标是一个适合长期写作和润色的工作台，而不是营销页或简单国风皮肤。
+当前界面是清爽的 SaaS 风格工作台：左侧白色边栏负责工具切换和语言切换，主区是柔和的极光渐变底、渐变大标题、白色圆角步骤卡片和紫色渐变主按钮。目标是一个像现代网页工具的写作工作台，而不是装饰性皮肤。
 
 所有长耗时动作都会有明确反馈。前端会为文章生成、选题/标题生成和整篇润色显示进度面板，包括百分比、当前阶段和最近日志，避免用户空等。
 
@@ -186,10 +184,10 @@ backend/
 frontend/
   src/components/  上传、生成、编辑器、通用组件
   src/lib/         API、状态、国际化文案
-  src/workbench.css  中国古典文房书案界面层
+  src/styles.css   浅色工作台主题（边栏、大标题、卡片）
 
-assets/screenshots/  README 截图和 GIF
-docs/                设计资料和背景图
+assets/screenshots/  README 截图
+docs/                设计资料
 ```
 
 ## 使用提醒

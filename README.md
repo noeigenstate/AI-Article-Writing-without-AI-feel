@@ -19,15 +19,13 @@ Open-source AI writing workbench for **Word rewriting**, **human-likeness scorin
 
 ## At A Glance
 
-<div align="center">
-  <img src="assets/screenshots/demo-generate.gif" alt="Speak Plainly interface demo" width="820" />
-  <br />
-  <sub>Classical scholar-desk UI, Word rewriting, progress logs, and source-backed article generation in one workspace.</sub>
-</div>
-
 | Rewrite Word | Generate Articles |
 | --- | --- |
 | <img src="assets/screenshots/01-rewrite.png" alt="Rewrite Word page" /> | <img src="assets/screenshots/02-generate.png" alt="Generate article page" /> |
+
+<div align="center">
+  <sub>A light SaaS-style workspace: Word rewriting, progress logs, and source-backed article generation behind one sidebar.</sub>
+</div>
 
 ## What It Does
 
@@ -101,7 +99,7 @@ Frontend: Vite will print the local URL, normally `http://localhost:5173`
 
 ## Interface
 
-The current UI uses a contemporary Chinese scholar-desk direction: xuan-paper background, ink-line structure, cinnabar primary actions, celadon status highlights, and a seal-style brand mark. The goal is a focused writing workspace rather than a marketing page or decorative skin.
+The current UI is a light SaaS-style workspace: a white sidebar for tool navigation and language switching, a pastel aurora backdrop, a gradient hero headline, white rounded cards for each step, and violet gradient primary actions. The goal is a focused writing workspace that feels like a modern web tool rather than a decorative skin.
 
 Long-running actions never leave the user waiting without feedback. The frontend shows a progress panel with percentage, current phase, and recent log-style steps for article generation, topic/title generation, and whole-document rewriting.
 
@@ -186,10 +184,10 @@ backend/
 frontend/
   src/components/  upload, generate, editor, common UI
   src/lib/         API client, store, i18n
-  src/workbench.css  classical scholar-desk interface layer
+  src/styles.css   light workspace theme (sidebar, hero, cards)
 
-assets/screenshots/  README screenshots and GIF
-docs/                design notes and background image
+assets/screenshots/  README screenshots
+docs/                design notes
 ```
 
 ## Notes
