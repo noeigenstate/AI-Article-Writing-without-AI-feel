@@ -18,7 +18,6 @@ export default function DocEditor() {
   const titleIndex = useStore((s) => s.titleIndex);
   const aiScore = useStore((s) => s.aiScore);
   const docId = useStore((s) => s.docId)!;
-  const mode = useStore((s) => s.mode);
   const lang = useStore((s) => s.lang);
   const t = messages[lang];
   const setSentence = useStore((s) => s.setSentence);
@@ -174,7 +173,7 @@ export default function DocEditor() {
 
   return (
     <>
-      {mode === "generate" && <GzhExportPanel />}
+      <GzhExportPanel />
       {compare ? (
         <div className="doc-compare">
           <section className="doc compare-doc">

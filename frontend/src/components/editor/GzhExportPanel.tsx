@@ -12,8 +12,8 @@ import ProgressBanner from "../common/ProgressBanner.js";
 import { messages } from "../../lib/i18n.js";
 
 /**
- * Inline 公众号排版 panel shown above the generated article: pick a theme,
- * auto-format the current document, then copy the rich text or download HTML.
+ * Inline 公众号排版 panel for the current editor document: pick a theme,
+ * auto-format the current text, then copy the rich text or download HTML.
  */
 export default function GzhExportPanel() {
   const lang = useStore((s) => s.lang);

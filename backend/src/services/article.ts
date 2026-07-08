@@ -1,13 +1,11 @@
 import { chat, type ChatOptions } from "./llm.js";
 import type { DocxBlock, ParaKind } from "./docx.js";
 import type { ResearchItem } from "./research/types.js";
-import { articleDraftPrompt, articleTopicsPrompt } from "../prompts/article.prompts.js";
+import { articleDraftPrompt, articleLengthFixPrompt, articleTopicsPrompt } from "../prompts/article.prompts.js";
 import { escapeSvg, shortDate, slug, stringField, truncate } from "../lib/text.js";
 import { parseJsonWithRepair } from "../lib/json.js";
 import {
   ARTICLE_LABELS,
-  CHAIN_NODE_LABELS,
-  EVIDENCE_TABLE_COLUMNS,
   tr,
   type Lang,
 } from "../core/i18n.js";
@@ -30,20 +28,15 @@ export interface GeneratedArticle {
   title: string;
   paragraphs: string[];
   references?: ArticleReference[];
-  evidenceTable?: ArticleTable;
+  /** Lead figure shown after the opening paragraph. */
   figure?: ArticleFigure;
+  /** Extra source images placed near the body paragraph they match. */
+  bodyFigures?: ArticleFigure[];
 }
 
 export interface ArticleReference {
   id: number;
   text: string;
-}
-
-export interface ArticleTable {
-  title: string;
-  columns: string[];
-  rows: string[][];
-  note?: string;
 }
 
 export interface ArticleFigure {
@@ -53,6 +46,7 @@ export interface ArticleFigure {
   imageUrl?: string;
   sourceName?: string;
   sourceUrl?: string;
+  afterParagraphIndex?: number;
 }
 
 export interface ArticleDomainMatch {
@@ -267,7 +261,58 @@ export async function generateTopicOptions(
 }
 
 /**
+ * Acceptance bands per length tier, wider than the prompt's ideal range so we
+ * only trigger a corrective pass on clear misses. zh counts characters, en words.
+ */
+const LENGTH_BANDS: Record<Lang, Record<NonNullable<GenerateArticleInput["targetLength"]>, { min: number; max: number }>> = {
+  zh: {
+    short: { min: 380, max: 800 },
+    medium: { min: 850, max: 1600 },
+    long: { min: 2600, max: 4600 },
+  },
+  en: {
+    short: { min: 250, max: 650 },
+    medium: { min: 700, max: 1400 },
+    long: { min: 1800, max: 3400 },
+  },
+};
+
+/**
+ * Output caps per length tier. Without an explicit cap the provider default
+ * (often ~4k tokens) silently truncates long drafts, and the JSON-repair pass
+ * then "recovers" a much shorter article.
+ */
+const DRAFT_MAX_TOKENS: Record<NonNullable<GenerateArticleInput["targetLength"]>, number> = {
+  short: 2500,
+  medium: 5000,
+  long: 8192,
+};
+
+/** How many corrective passes to attempt when a draft misses its length band. */
+const MAX_LENGTH_FIX_PASSES = 2;
+
+/** Measure article body length: characters for zh, whitespace-separated words for en. */
+export function articleBodyLength(article: GeneratedArticle, lang: Lang): number {
+  const text = [article.title, ...article.paragraphs].join("\n");
+  if (lang === "zh") {
+    return text.replace(/\s+/g, "").length;
+  }
+  return text.trim().match(/\S+/g)?.length ?? 0;
+}
+
+/** Distance from a length to a band; 0 when inside the band. */
+function distanceToBand(length: number, band: { min: number; max: number }): number {
+  if (length < band.min) return band.min - length;
+  if (length > band.max) return length - band.max;
+  return 0;
+}
+
+/**
  * Generate a full article draft (title + paragraphs) from a topic.
+ *
+ * The draft is checked against the target-length band; on a clear miss the
+ * model is asked to expand/condense its own draft (up to two passes), and a
+ * pass is kept only when it moves the length toward the band.
  *
  * @param input Domain, topic, style, length, research context, and language.
  * @param ask Chat function (injectable for testing).
@@ -278,11 +323,30 @@ export async function generateArticleDraft(
   input: GenerateArticleInput,
   ask: ChatFn = chat
 ): Promise<GeneratedArticle> {
-  const raw = await ask(articleDraftPrompt(input), { temperature: 0.72 });
+  const lang: Lang = input.lang ?? "en";
+  const targetLength = input.targetLength ?? "medium";
+  const maxTokens = DRAFT_MAX_TOKENS[targetLength];
+  const raw = await ask(articleDraftPrompt(input), { temperature: 0.72, maxTokens });
   const parsed = await parseJsonWithRepair<unknown>(raw, ask, "article JSON object");
-  const article = normalizeArticle(parsed);
+  let article = normalizeArticle(parsed);
   if (!article) {
     throw new Error("The model did not return a usable article JSON.");
+  }
+
+  const band = LENGTH_BANDS[lang][targetLength];
+  for (let pass = 0; pass < MAX_LENGTH_FIX_PASSES; pass += 1) {
+    const length = articleBodyLength(article, lang);
+    const miss = distanceToBand(length, band);
+    if (miss === 0) break;
+    const fixedRaw = await ask(articleLengthFixPrompt(article, input, length, band), {
+      temperature: 0.72,
+      maxTokens,
+    });
+    const fixed = normalizeArticle(await parseJsonWithRepair<unknown>(fixedRaw, ask, "article JSON object"));
+    if (!fixed) break;
+    // 只在更接近目标区间时采用；否则保留上一版，避免越改越糟
+    if (distanceToBand(articleBodyLength(fixed, lang), band) >= miss) break;
+    article = fixed;
   }
   return article;
 }
@@ -300,7 +364,43 @@ export function articleToDocParagraphs(article: GeneratedArticle): { kind: ParaK
 }
 
 /**
- * Lay out an article as ordered docx blocks: title, lead, figure, body, table, refs.
+ * Spread body figures roughly evenly through the body paragraphs.
+ *
+ * @param figures Figures to place after body paragraphs.
+ * @param paragraphCount Number of body paragraphs available.
+ * @returns Map from body-paragraph index → figures to insert after it.
+ */
+function spreadFigures(figures: ArticleFigure[], paragraphCount: number): Map<number, ArticleFigure[]> {
+  const placement = new Map<number, ArticleFigure[]>();
+  if (figures.length === 0 || paragraphCount === 0) {
+    return placement;
+  }
+
+  const unanchored: ArticleFigure[] = [];
+  for (const figure of figures) {
+    if (typeof figure.afterParagraphIndex === "number") {
+      const after = Math.min(paragraphCount - 1, Math.max(0, figure.afterParagraphIndex - 1));
+      const list = placement.get(after) ?? [];
+      list.push(figure);
+      placement.set(after, list);
+    } else {
+      unanchored.push(figure);
+    }
+  }
+
+  const step = paragraphCount / unanchored.length;
+  unanchored.forEach((figure, i) => {
+    const after = Math.min(paragraphCount - 1, Math.max(0, Math.floor(step * (i + 1)) - 1));
+    const list = placement.get(after) ?? [];
+    list.push(figure);
+    placement.set(after, list);
+  });
+  return placement;
+}
+
+/**
+ * Lay out an article as ordered docx blocks: title, lead figure, body (with
+ * interspersed figures), and references.
  *
  * @param article The generated (enriched) article.
  * @param lang Target language for section labels.
@@ -320,12 +420,16 @@ export function articleToDocBlocks(article: GeneratedArticle, lang: Lang = "en")
     blocks.push({ type: "figure", ...article.figure });
   }
 
-  blocks.push(
-    ...article.paragraphs.slice(1).map((text) => ({ type: "paragraph" as const, kind: "normal" as const, text }))
-  );
-
-  if (article.evidenceTable) {
-    blocks.push({ type: "table", ...article.evidenceTable });
+  const bodyParagraphs = article.paragraphs.slice(1);
+  const bodyFigures = article.bodyFigures ?? [];
+  const figuresAfter = spreadFigures(bodyFigures, bodyParagraphs.length);
+  if (bodyParagraphs.length === 0) {
+    for (const figure of bodyFigures) blocks.push({ type: "figure", ...figure });
+  } else {
+    bodyParagraphs.forEach((text, i) => {
+      blocks.push({ type: "paragraph", kind: "normal", text });
+      for (const figure of figuresAfter.get(i) ?? []) blocks.push({ type: "figure", ...figure });
+    });
   }
 
   if (article.references && article.references.length > 0) {
@@ -383,12 +487,19 @@ export function articleToRenderBlocks(
     blocks.push({ type: "figure", ...article.figure, svg: article.figure.imageUrl ? "" : article.figure.svg });
   }
 
-  for (const paragraph of article.paragraphs.slice(1)) {
-    blocks.push({ type: "paragraph", kind: "normal", text: paragraph, paragraphIndex: takeParagraphIndex(paragraph) });
-  }
-
-  if (article.evidenceTable) {
-    blocks.push({ type: "table", ...article.evidenceTable });
+  const bodyParagraphs = article.paragraphs.slice(1);
+  const bodyFigures = article.bodyFigures ?? [];
+  const figuresAfter = spreadFigures(bodyFigures, bodyParagraphs.length);
+  const pushFigure = (figure: ArticleFigure) =>
+    // 前端有 imageUrl 时直接用原图；不必把（可能内嵌了 base64 图片的）大 SVG 发给浏览器
+    blocks.push({ type: "figure", ...figure, svg: figure.imageUrl ? "" : figure.svg });
+  if (bodyParagraphs.length === 0) {
+    for (const figure of bodyFigures) pushFigure(figure);
+  } else {
+    bodyParagraphs.forEach((paragraph, i) => {
+      blocks.push({ type: "paragraph", kind: "normal", text: paragraph, paragraphIndex: takeParagraphIndex(paragraph) });
+      for (const figure of figuresAfter.get(i) ?? []) pushFigure(figure);
+    });
   }
 
   if (article.references && article.references.length > 0) {
@@ -403,7 +514,7 @@ export function articleToRenderBlocks(
 }
 
 /**
- * Attach references, an evidence table, a figure, and inline citations to an article.
+ * Attach references, relevant source images, and inline citations to an article.
  *
  * @param article The drafted article.
  * @param items Research items gathered for the topic.
@@ -419,12 +530,14 @@ export async function enrichArticleWithResearch(
 ): Promise<GeneratedArticle> {
   const evidenceItems = items.slice(0, 8);
   const references = formatReferences(evidenceItems, accessedAt);
+  // 配图从全部资料里选（图注自带来源名和链接），不受参考文献前 8 条的限制
+  const { lead, body } = await buildArticleFigures(article, items, lang);
   return {
     ...article,
     paragraphs: enforceInlineCitations(article.paragraphs, references.length),
     references,
-    evidenceTable: buildEvidenceTable(evidenceItems, lang),
-    figure: await buildEvidenceFigure(article, evidenceItems, lang),
+    figure: lead,
+    bodyFigures: body,
   };
 }
 
@@ -566,95 +679,147 @@ function enforceInlineCitations(paragraphs: string[], referenceCount: number): s
   );
 }
 
-/** Build the "key evidence" table (up to 6 rows) from research items. */
-function buildEvidenceTable(items: ResearchItem[], lang: Lang = "en"): ArticleTable {
-  const rows = items.slice(0, 6).map((item, index) => [
-    `[${index + 1}]`,
-    item.sourceKind === "paper" ? tr(ARTICLE_LABELS.typePaper, lang) : tr(ARTICLE_LABELS.typeNews, lang),
-    item.sourceName,
-    shortDate(item.publishedAt),
-    truncate(item.summary || item.title, 90),
-  ]);
+/** How many extra source images (beyond the lead) to spread through the body. */
+const MAX_BODY_IMAGES = 3;
+const MIN_IMAGE_RELEVANCE_SCORE = 3;
+/** Target minimum images per article; weak-but-related matches backfill up to this. */
+const MIN_TOTAL_IMAGES = 3;
 
-  return {
-    title: tr(ARTICLE_LABELS.evidenceTableTitle, lang),
-    columns: EVIDENCE_TABLE_COLUMNS[lang],
-    rows: rows.length > 0 ? rows : [["-", "-", "-", "-", tr(ARTICLE_LABELS.evidenceTableEmpty, lang)]],
-    note: tr(ARTICLE_LABELS.evidenceTableNote, lang),
-  };
+interface RankedSourceImage {
+  item: ResearchItem;
+  score: number;
+  paragraphIndex: number;
 }
 
-/** Build the lead figure: a real source image when available, else an evidence-chain diagram. */
-async function buildEvidenceFigure(
+/**
+ * Build the lead figure plus any in-body figures.
+ *
+ * Only source images with enough text-signal overlap are used. The image is
+ * placed after the paragraph it best matches; unrelated images are omitted.
+ */
+async function buildArticleFigures(
   article: GeneratedArticle,
   items: ResearchItem[],
   lang: Lang = "en"
-): Promise<ArticleFigure> {
-  const sourceImage = selectBestSourceImage(article, items);
-  if (sourceImage?.imageUrl) {
-    const caption =
-      lang === "zh"
-        ? `图1 图片来源：${sourceImage.sourceName}，《${sourceImage.title}》，${sourceImage.url}`
-        : `Figure 1. Image source: ${sourceImage.sourceName}, "${sourceImage.title}", ${sourceImage.url}`;
-    // Word 不会加载 SVG 里的外链图片，这里抓下来内嵌成 data URI；抓取失败则出灰色占位
-    const dataUri = await fetchImageDataUri(sourceImage.imageUrl);
-    return {
-      title: tr(ARTICLE_LABELS.figureSourceTitle, lang),
-      caption,
-      imageUrl: sourceImage.imageUrl,
-      sourceName: sourceImage.sourceName,
-      sourceUrl: sourceImage.url,
-      svg: sourceImageSvg(sourceImage, dataUri),
-    };
+): Promise<{ lead?: ArticleFigure; body: ArticleFigure[] }> {
+  const ranked = rankSourceImages(article, items);
+  if (ranked.length === 0) {
+    return { body: [] };
   }
 
-  const nodes = [
-    { label: tr(CHAIN_NODE_LABELS.problem, lang), text: truncate(article.title, 34) },
-    {
-      label: tr(CHAIN_NODE_LABELS.evidence, lang),
-      text: items[0] ? `[1] ${truncate(items[0].title, 40)}` : tr(ARTICLE_LABELS.noLiveSource, lang),
-    },
-    {
-      label: tr(CHAIN_NODE_LABELS.crossCheck, lang),
-      text: items[1] ? `[2] ${truncate(items[1].title, 40)}` : tr(ARTICLE_LABELS.needSecondSource, lang),
-    },
-    { label: tr(CHAIN_NODE_LABELS.judgment, lang), text: tr(ARTICLE_LABELS.conclusionNode, lang) },
-  ];
+  let figNo = 0;
+  const leadMatch = ranked.find((entry) => entry.paragraphIndex === 0);
+  const bodyMatches = ranked
+    .filter((entry) => entry !== leadMatch)
+    .slice(0, leadMatch ? MAX_BODY_IMAGES : MAX_BODY_IMAGES + 1);
+  const lead = leadMatch ? await buildSourceImageFigure(leadMatch.item, ++figNo, lang, 0) : undefined;
+  const body: ArticleFigure[] = [];
+  for (const match of bodyMatches) {
+    figNo += 1;
+    body.push(await buildSourceImageFigure(match.item, figNo, lang, match.paragraphIndex));
+  }
+  return { lead, body };
+}
 
+/** Localized figure number prefix, e.g. "图2" / "Figure 2.". */
+function figureLabel(n: number, lang: Lang): string {
+  return lang === "zh" ? `图${n}` : `Figure ${n}.`;
+}
+
+/** Build a figure card for one retrieved source image. */
+async function buildSourceImageFigure(
+  item: ResearchItem,
+  n: number,
+  lang: Lang,
+  afterParagraphIndex: number
+): Promise<ArticleFigure> {
+  const prefix = figureLabel(n, lang);
+  const caption =
+    lang === "zh"
+      ? `${prefix} 图片来源：${item.sourceName}，《${item.title}》，${item.url}`
+      : `${prefix} Image source: ${item.sourceName}, "${item.title}", ${item.url}`;
+  // Word 不会加载 SVG 里的外链图片，这里抓下来内嵌成 data URI；抓取失败则出灰色占位
+  const dataUri = await fetchImageDataUri(item.imageUrl ?? "");
   return {
-    title: tr(ARTICLE_LABELS.figureChainTitle, lang),
-    caption: tr(ARTICLE_LABELS.figureChainCaption, lang),
-    svg: evidenceSvg(nodes),
+    title: `${prefix} ${tr(ARTICLE_LABELS.figureSourceWord, lang)}`,
+    caption,
+    imageUrl: item.imageUrl,
+    sourceName: item.sourceName,
+    sourceUrl: item.url,
+    afterParagraphIndex,
+    svg: sourceImageSvg(item, dataUri),
   };
 }
 
-function selectBestSourceImage(article: GeneratedArticle, items: ResearchItem[]): ResearchItem | undefined {
+/**
+ * Rank source images best-match-first for the article; empty when none are relevant.
+ *
+ * Strong matches (score ≥ {@link MIN_IMAGE_RELEVANCE_SCORE}) come first; when
+ * they are scarce, weaker-but-related matches (score > 0) backfill up to
+ * {@link MIN_TOTAL_IMAGES} so articles are not stuck with a single image.
+ * Zero-overlap images are never used.
+ */
+function rankSourceImages(article: GeneratedArticle, items: ResearchItem[]): RankedSourceImage[] {
   const candidates = items.filter((item) => item.imageUrl);
   if (candidates.length === 0) {
-    return undefined;
+    return [];
   }
 
-  const articleText = [article.title, ...article.paragraphs.slice(0, 3)].join(" ");
-  const articleTokens = tokenizeForImageMatch(articleText);
-  let best: { item: ResearchItem; score: number } | undefined;
+  const paragraphs = article.paragraphs.length > 0 ? article.paragraphs : [article.title];
 
-  for (const item of candidates) {
-    const sourceText = [item.title, item.summary, item.sourceName].join(" ");
-    const sourceTokens = tokenizeForImageMatch(sourceText);
-    const overlap = [...sourceTokens].filter((token) => articleTokens.has(token)).length;
-    const titleOverlap = [...tokenizeForImageMatch(item.title)].filter((token) => articleTokens.has(token)).length;
-    const score = overlap + titleOverlap * 2 + (item.sourceKind === "news" ? 0.3 : 0);
-    if (!best || score > best.score) {
-      best = { item, score };
-    }
+  const scored = candidates
+    .map((item) => {
+      let best = { score: 0, paragraphIndex: 0 };
+      paragraphs.forEach((paragraph, paragraphIndex) => {
+        const score = imageRelevanceScore([article.title, paragraph].join(" "), item);
+        if (score > best.score) {
+          best = { score, paragraphIndex };
+        }
+      });
+      return { item, ...best };
+    })
+    .sort((a, b) => b.score - a.score);
+
+  const strong = scored.filter((entry) => entry.score >= MIN_IMAGE_RELEVANCE_SCORE);
+  const weak = scored.filter((entry) => entry.score > 0 && entry.score < MIN_IMAGE_RELEVANCE_SCORE);
+  return strong
+    .concat(weak.slice(0, Math.max(0, MIN_TOTAL_IMAGES - strong.length)))
+    .slice(0, MAX_BODY_IMAGES + 1);
+}
+
+function imageRelevanceScore(targetText: string, item: ResearchItem): number {
+  const targetTokens = tokenizeForImageMatch(targetText);
+  if (targetTokens.size === 0) return 0;
+
+  const sourceTokens = tokenizeForImageMatch([item.title, item.summary, item.sourceName, item.query].join(" "));
+  const titleTokens = tokenizeForImageMatch(item.title);
+  if (sourceTokens.size === 0 && titleTokens.size === 0) return 0;
+
+  const overlap = countOverlap(sourceTokens, targetTokens);
+  const titleOverlap = countOverlap(titleTokens, targetTokens);
+  const coverage = sourceTokens.size > 0 ? overlap / Math.min(sourceTokens.size, targetTokens.size) : 0;
+  return overlap + titleOverlap * 1.5 + coverage * 2;
+}
+
+function countOverlap(a: Set<string>, b: Set<string>): number {
+  let n = 0;
+  for (const token of a) {
+    if (b.has(token)) n += 1;
   }
-
-  return best?.item ?? candidates[0];
+  return n;
 }
 
 function tokenizeForImageMatch(text: string): Set<string> {
   const normalized = text.toLowerCase();
-  const words = normalized.match(/[a-z0-9][a-z0-9-]{2,}|[\u4e00-\u9fff]{2,}/g) ?? [];
+  const words: string[] = normalized.match(/[a-z0-9][a-z0-9-]{2,}/g) ?? [];
+  for (const segment of normalized.match(/[\u4e00-\u9fff]{2,}/g) ?? []) {
+    for (let i = 0; i < segment.length - 1; i += 1) {
+      words.push(segment.slice(i, i + 2));
+    }
+    for (let i = 0; i < segment.length - 2; i += 1) {
+      words.push(segment.slice(i, i + 3));
+    }
+  }
   const stop = new Set([
     "the",
     "and",
@@ -671,17 +836,17 @@ function tokenizeForImageMatch(text: string): Set<string> {
     "into",
     "after",
     "before",
-    "如何",
-    "一个",
-    "我们",
-    "他们",
-    "这些",
-    "那些",
-    "可以",
-    "正在",
-    "已经",
-    "因为",
-    "但是",
+    "\u5982\u4f55",
+    "\u4e00\u4e2a",
+    "\u6211\u4eec",
+    "\u4ed6\u4eec",
+    "\u8fd9\u4e9b",
+    "\u90a3\u4e9b",
+    "\u53ef\u4ee5",
+    "\u6b63\u5728",
+    "\u5df2\u7ecf",
+    "\u56e0\u4e3a",
+    "\u4f46\u662f",
   ]);
   return new Set(words.filter((word) => !stop.has(word)));
 }
@@ -745,38 +910,4 @@ function formatReferences(items: ResearchItem[], accessedAt: Date): ArticleRefer
       text: `[${index + 1}] ${authors}. (${date}). ${item.title}. ${source}. ${item.url}. Accessed ${accessed}.`,
     };
   });
-}
-
-/** Render the four-node "evidence chain" diagram as an SVG string. */
-function evidenceSvg(nodes: { label: string; text: string }[]): string {
-  const width = 760;
-  const height = 300;
-  const boxes = nodes
-    .map((node, index) => {
-      const x = 30 + index * 180;
-      const line1 = truncate(node.text, 19);
-      const line2 = node.text.length > 19 ? truncate(node.text.slice(19), 18) : "";
-      const arrow =
-        index < nodes.length - 1
-          ? `<path d="M${x + 150} 150 L${x + 172} 150" stroke="#94a3b8" stroke-width="3" marker-end="url(#arrow)"/>`
-          : "";
-      return `<g>
-        <rect x="${x}" y="84" width="150" height="132" rx="12" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
-        <text x="${x + 75}" y="116" text-anchor="middle" font-size="18" font-weight="700" fill="#4f46e5">${escapeSvg(node.label)}</text>
-        <text x="${x + 16}" y="154" font-size="14" fill="#334155">${escapeSvg(line1)}</text>
-        <text x="${x + 16}" y="178" font-size="14" fill="#334155">${escapeSvg(line2)}</text>
-      </g>${arrow}`;
-    })
-    .join("");
-
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-    <defs>
-      <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
-        <path d="M0,0 L0,6 L9,3 z" fill="#94a3b8"/>
-      </marker>
-    </defs>
-    <rect width="${width}" height="${height}" rx="18" fill="#f8fafc"/>
-    <text x="30" y="42" font-size="22" font-weight="700" fill="#0f172a">Evidence chain</text>
-    ${boxes}
-  </svg>`;
 }
