@@ -157,7 +157,7 @@ async function generateArticlePayload(input: {
     researchContext,
     lang,
   });
-  const article = enrichArticleWithResearch(draft, bundleWithImages.items, new Date(bundle.generatedAt), lang);
+  const article = await enrichArticleWithResearch(draft, bundleWithImages.items, new Date(bundle.generatedAt), lang);
 
   const docx = await createDocxFromBlocks(articleToDocBlocks(article, lang));
   const parsed = await parseDocx(docx);

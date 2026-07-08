@@ -171,10 +171,10 @@ assert.equal(docParagraphs[0].kind, "heading1");
 assert.equal(docParagraphs[0].text, article.title);
 assert.equal(docParagraphs[1].kind, "normal");
 
-const enriched = enrichArticleWithResearch(
+const enriched = await enrichArticleWithResearch(
   {
     title: "证据驱动的文章",
-    paragraphs: ["第一段必须有来源支撑。", "第二段继续推进判断。"],
+    paragraphs: ["第一段有真实引用。[1]", "第二段引用了不存在的来源。[9]", "第三段没有引用。"],
   },
   [
     {
@@ -206,12 +206,15 @@ const enriched = enrichArticleWithResearch(
   new Date("2026-06-01T00:00:00.000Z"),
   "zh"
 );
+// 真实引用保留；越界引用被清理；无引用段落不再被补造引用
 assert.ok(enriched.paragraphs[0].includes("[1]"));
+assert.ok(!enriched.paragraphs[1].includes("[9]"));
+assert.ok(!/\[\d+\]/.test(enriched.paragraphs[2]));
 assert.equal(enriched.references?.length, 2);
 assert.ok(enriched.references?.[0].text.includes("Ada Chen, Ben Rao"));
 assert.equal(enriched.figure?.imageUrl, "https://example.com/chart.jpg");
 
-const matchedImageArticle = enrichArticleWithResearch(
+const matchedImageArticle = await enrichArticleWithResearch(
   {
     title: "Climate Teams Track River Flood Risk",
     paragraphs: [

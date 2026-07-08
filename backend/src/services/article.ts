@@ -379,7 +379,8 @@ export function articleToRenderBlocks(
   }
 
   if (article.figure) {
-    blocks.push({ type: "figure", ...article.figure });
+    // 前端有 imageUrl 时直接用原图；不必把（可能内嵌了 base64 图片的）大 SVG 发给浏览器
+    blocks.push({ type: "figure", ...article.figure, svg: article.figure.imageUrl ? "" : article.figure.svg });
   }
 
   for (const paragraph of article.paragraphs.slice(1)) {
@@ -410,12 +411,12 @@ export function articleToRenderBlocks(
  * @param lang Target language.
  * @returns A new article enriched with sourcing.
  */
-export function enrichArticleWithResearch(
+export async function enrichArticleWithResearch(
   article: GeneratedArticle,
   items: ResearchItem[],
   accessedAt = new Date(),
   lang: Lang = "en"
-): GeneratedArticle {
+): Promise<GeneratedArticle> {
   const evidenceItems = items.slice(0, 8);
   const references = formatReferences(evidenceItems, accessedAt);
   return {
@@ -423,7 +424,7 @@ export function enrichArticleWithResearch(
     paragraphs: enforceInlineCitations(article.paragraphs, references.length),
     references,
     evidenceTable: buildEvidenceTable(evidenceItems, lang),
-    figure: buildEvidenceFigure(article, evidenceItems, lang),
+    figure: await buildEvidenceFigure(article, evidenceItems, lang),
   };
 }
 
@@ -547,19 +548,22 @@ Output strictly a JSON object:
 {"domainId":"ai-tech","confidence":88,"reasons":["reason 1","reason 2"]}`;
 }
 
-/** Ensure each paragraph ends with a `[n]` citation, cycling through available refs. */
+/**
+ * Keep only inline citations that point at a real reference.
+ *
+ * 不再给没有引用的段落补造编号（那会伪造出处）；只把指向不存在参考文献的
+ * `[n]` 标记清掉，段落有没有引用完全由模型是否真的引用了资料决定。
+ */
 function enforceInlineCitations(paragraphs: string[], referenceCount: number): string[] {
-  if (referenceCount === 0) {
-    return paragraphs;
-  }
-
-  return paragraphs.map((paragraph, index) => {
-    if (/\[\d+\]/.test(paragraph)) {
-      return paragraph;
-    }
-    const citation = `[${(index % Math.min(referenceCount, 4)) + 1}]`;
-    return `${paragraph} ${citation}`;
-  });
+  return paragraphs.map((paragraph) =>
+    paragraph
+      .replace(/\[(\d+)\]/g, (marker, n: string) => {
+        const id = Number(n);
+        return id >= 1 && id <= referenceCount ? marker : "";
+      })
+      .replace(/ {2,}/g, " ")
+      .trimEnd()
+  );
 }
 
 /** Build the "key evidence" table (up to 6 rows) from research items. */
@@ -581,20 +585,26 @@ function buildEvidenceTable(items: ResearchItem[], lang: Lang = "en"): ArticleTa
 }
 
 /** Build the lead figure: a real source image when available, else an evidence-chain diagram. */
-function buildEvidenceFigure(article: GeneratedArticle, items: ResearchItem[], lang: Lang = "en"): ArticleFigure {
+async function buildEvidenceFigure(
+  article: GeneratedArticle,
+  items: ResearchItem[],
+  lang: Lang = "en"
+): Promise<ArticleFigure> {
   const sourceImage = selectBestSourceImage(article, items);
   if (sourceImage?.imageUrl) {
     const caption =
       lang === "zh"
         ? `图1 图片来源：${sourceImage.sourceName}，《${sourceImage.title}》，${sourceImage.url}`
         : `Figure 1. Image source: ${sourceImage.sourceName}, "${sourceImage.title}", ${sourceImage.url}`;
+    // Word 不会加载 SVG 里的外链图片，这里抓下来内嵌成 data URI；抓取失败则出灰色占位
+    const dataUri = await fetchImageDataUri(sourceImage.imageUrl);
     return {
       title: tr(ARTICLE_LABELS.figureSourceTitle, lang),
       caption,
       imageUrl: sourceImage.imageUrl,
       sourceName: sourceImage.sourceName,
       sourceUrl: sourceImage.url,
-      svg: sourceImageSvg(sourceImage),
+      svg: sourceImageSvg(sourceImage, dataUri),
     };
   }
 
@@ -676,14 +686,47 @@ function tokenizeForImageMatch(text: string): Set<string> {
   return new Set(words.filter((word) => !stop.has(word)));
 }
 
-/** Render an SVG card embedding a source image with its name and title. */
-function sourceImageSvg(item: ResearchItem): string {
+/** Cap for inlined source images; larger downloads fall back to the placeholder. */
+const IMAGE_INLINE_MAX_BYTES = 3 * 1024 * 1024;
+
+/**
+ * Download an image and return it as a `data:` URI for embedding inside SVG.
+ *
+ * @returns The data URI, or "" on timeout/oversize/non-image responses.
+ */
+async function fetchImageDataUri(url: string, timeoutMs = 8000): Promise<string> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { signal: controller.signal, redirect: "follow" });
+      if (!res.ok) return "";
+      const type = res.headers.get("content-type")?.split(";")[0].trim().toLowerCase() ?? "";
+      if (!type.startsWith("image/") || type === "image/svg+xml") return "";
+      const bytes = Buffer.from(await res.arrayBuffer());
+      if (bytes.length === 0 || bytes.length > IMAGE_INLINE_MAX_BYTES) return "";
+      return `data:${type};base64,${bytes.toString("base64")}`;
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch {
+    return "";
+  }
+}
+
+/** Render an SVG card embedding a source image (inlined data URI) with its name and title. */
+function sourceImageSvg(item: ResearchItem, dataUri = ""): string {
   const width = 760;
   const height = 360;
-  const image = item.imageUrl ? escapeSvg(item.imageUrl) : "";
+  const imageArea = dataUri
+    ? `<image href="${dataUri}" x="24" y="24" width="712" height="246" preserveAspectRatio="xMidYMid slice"/>`
+    : `<rect x="24" y="24" width="712" height="246" rx="10" fill="#e2e8f0"/>
+    <text x="380" y="152" font-size="15" fill="#64748b" text-anchor="middle">${escapeSvg(
+      truncate(item.url ?? "", 64)
+    )}</text>`;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
     <rect width="${width}" height="${height}" rx="18" fill="#f8fafc"/>
-    <image href="${image}" x="24" y="24" width="712" height="246" preserveAspectRatio="xMidYMid slice"/>
+    ${imageArea}
     <rect x="24" y="284" width="712" height="52" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
     <text x="42" y="314" font-size="16" font-weight="700" fill="#0f172a">${escapeSvg(truncate(item.sourceName, 28))}</text>
     <text x="172" y="314" font-size="15" fill="#334155">${escapeSvg(truncate(item.title, 72))}</text>

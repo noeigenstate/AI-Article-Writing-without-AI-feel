@@ -145,7 +145,9 @@ npm run dev
 
 当前启用的 RSS 源包括 NPR World、France 24、CNBC World、UN News、TechCrunch、Ars Technica、Wired、MIT Technology Review、Engadget、Hacker News via HNRSS、CNBC Top News、MarketWatch 和 36Kr。
 
-目前 Agent-Reach 集成的是 Exa/mcporter 搜索路径，用作宽泛网页资料来源。Reddit、X/Twitter、小红书等需要登录态的社交来源，需要单独配置凭证/cookies，因此不会默认开启。
+目前 Agent-Reach 集成的是 Exa/mcporter 搜索路径，用作宽泛网页资料来源；Windows 下会经 cmd.exe 调用并正确转义参数，行为与 macOS/Linux 一致。Reddit、X/Twitter、小红书等需要登录态的社交来源，需要单独配置凭证/cookies，因此不会默认开启。
+
+正文中的 `[n]` 引用只出现在模型真实引用了资料的位置——指向不存在参考文献的编号会被清理，而不是补造假引用。头图使用真实来源图片时，图片会被下载并内嵌进导出的 Word（Word 不会加载外链图片）。
 
 ## 公众号排版
 

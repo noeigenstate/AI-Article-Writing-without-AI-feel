@@ -145,7 +145,9 @@ Article generation can collect live context from arXiv, RSS feeds, and optional 
 
 Current enabled RSS sources include NPR World, France 24, CNBC World, UN News, TechCrunch, Ars Technica, Wired, MIT Technology Review, Engadget, Hacker News via HNRSS, CNBC Top News, MarketWatch, and 36Kr.
 
-The Agent-Reach integration currently uses its Exa/mcporter search path as a broad web source. Reddit, X/Twitter, Xiaohongshu, and similar logged-in social channels require credentials/cookies and are intentionally not switched on automatically.
+The Agent-Reach integration currently uses its Exa/mcporter search path as a broad web source; on Windows the call goes through cmd.exe with proper argument quoting, so it works the same as on macOS/Linux. Reddit, X/Twitter, Xiaohongshu, and similar logged-in social channels require credentials/cookies and are intentionally not switched on automatically.
+
+Inline `[n]` citations appear only where the model actually cited a reference — markers pointing at nonexistent references are stripped rather than fabricated. When the lead figure uses a real source image, the image is downloaded and embedded into the exported Word file (Word does not load external image URLs).
 
 ## WeChat Formatting (公众号排版)
 
