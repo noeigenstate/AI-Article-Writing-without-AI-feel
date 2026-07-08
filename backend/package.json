@@ -11,6 +11,7 @@
     "test:docx": "tsx src/scripts/test-docx.ts",
     "test:splitter": "tsx src/scripts/test-splitter.ts",
     "test:rewrite": "tsx src/scripts/test-rewrite.ts",
+    "test:protect": "tsx src/scripts/test-protect.ts",
     "test:article": "tsx src/scripts/test-article.ts",
     "test:research": "tsx src/scripts/test-research.ts",
     "test:llm": "tsx src/scripts/test-llm.ts",

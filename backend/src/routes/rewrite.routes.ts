@@ -11,6 +11,7 @@ import {
   fullText,
 } from "../services/rewrite.js";
 import { scoreText } from "../services/aiScore.js";
+import { preservesProtectedFragments } from "../services/protect.js";
 import { saveDoc, getDoc, type DocRecord } from "../core/store.js";
 import { getBuiltinStyle } from "../data/styles.js";
 import { writingSceneProfile } from "../data/writingScenes.js";
@@ -63,7 +64,8 @@ function humanScoreSafeParagraphs(
 
     const originalScore = scoreText(source.text, lang).score;
     const rewrittenScore = scoreText(p.rewritten, lang).score;
-    return rewrittenScore >= originalScore ? p : paragraphResponse(source, source.text);
+    const keepsFacts = preservesProtectedFragments(source.text, p.rewritten);
+    return keepsFacts && rewrittenScore >= originalScore ? p : paragraphResponse(source, source.text);
   });
 
   const guardedScore = scoreRewrittenParagraphs(guarded, originalByIndex, lang);
@@ -76,6 +78,20 @@ function humanScoreSafeParagraphs(
     return source ? paragraphResponse(source, source.text) : p;
   });
   return { paragraphs: fallback, score: beforeScore };
+}
+
+function protectedFragmentSafeParagraphs(
+  original: { index: number; kind: string; text: string }[],
+  rewritten: RewrittenParagraph[]
+): RewrittenParagraph[] {
+  const originalByIndex = new Map(original.map((p) => [p.index, p]));
+  return rewritten.map((p) => {
+    const source = originalByIndex.get(p.index);
+    if (!source || preservesProtectedFragments(source.text, p.rewritten)) {
+      return p;
+    }
+    return paragraphResponse(source, source.text);
+  });
 }
 
 function rewriteTargetsForDoc(rec: DocRecord): DocRecord["paragraphs"] {
@@ -187,6 +203,7 @@ router.post("/api/rewrite", async (req, res) => {
       const text = map.get(p.index) ?? p.text;
       return paragraphResponse(p, text);
     });
+    paragraphs = protectedFragmentSafeParagraphs(rewriteTargets, paragraphs);
 
     // 本地算改写前后的人类感分，给前端展示「42 → 86」的效果对照。
     const before = scoreParagraphs(rewriteTargets, lang);
