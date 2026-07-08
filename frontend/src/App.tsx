@@ -92,11 +92,13 @@ export default function App() {
         )}
 
         <main>
+          {/* 两个工作区的编辑器都保持挂载、只用 hidden 切换显隐：卸载会丢掉
+              公众号排版等组件本地状态，切回来时进行中的排版就被打断了 */}
           <section hidden={mode !== "rewrite"}>
-            {rewriteStep === "upload" ? <UploadPanel /> : mode === "rewrite" ? <DocEditor /> : null}
+            {rewriteStep === "upload" ? <UploadPanel /> : <DocEditor />}
           </section>
           <section hidden={mode !== "generate"}>
-            {generateStep === "upload" ? <ArticleGenerator /> : mode === "generate" ? <DocEditor /> : null}
+            {generateStep === "upload" ? <ArticleGenerator /> : <DocEditor />}
           </section>
         </main>
 

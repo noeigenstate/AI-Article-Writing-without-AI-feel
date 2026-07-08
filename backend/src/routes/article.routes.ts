@@ -19,6 +19,7 @@ import { enrichResearchImages } from "../services/research/images.js";
 import { titleIndexOf } from "../services/rewrite.js";
 import { saveDoc } from "../core/store.js";
 import { getBuiltinStyle } from "../data/styles.js";
+import { writingSceneProfile } from "../data/writingScenes.js";
 import { normalizeLang, SERVER_MESSAGES, ARTICLE_LABELS, tr, type Lang } from "../core/i18n.js";
 
 /** Routes for topic planning, research preview, and article generation. */
@@ -71,11 +72,12 @@ router.post("/api/research/preview", async (req, res) => {
 /** `POST /api/article/generate` — generate a full article from a chosen topic. */
 router.post("/api/article/generate", async (req, res) => {
   try {
-    const { domainId, customDomain, topic, styleId, targetLength, lang: rawLang } = req.body as {
+    const { domainId, customDomain, topic, styleId, sceneId, targetLength, lang: rawLang } = req.body as {
       domainId?: string;
       customDomain?: string;
       topic: TopicOption | string;
       styleId?: string;
+      sceneId?: string;
       targetLength?: "short" | "medium" | "long";
       lang?: string;
     };
@@ -83,7 +85,7 @@ router.post("/api/article/generate", async (req, res) => {
     if (!topic) return res.status(400).json({ error: tr(SERVER_MESSAGES.missingTopic, lang) });
 
     const domain = resolveArticleDomain(domainId, customDomain, lang);
-    res.json(await generateArticlePayload({ domain, topic, styleId, targetLength, lang }));
+    res.json(await generateArticlePayload({ domain, topic, styleId, sceneId, targetLength, lang }));
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });
   }
@@ -92,9 +94,10 @@ router.post("/api/article/generate", async (req, res) => {
 /** `POST /api/article/generate-from-title` — infer the domain from a title, then generate. */
 router.post("/api/article/generate-from-title", async (req, res) => {
   try {
-    const { title, styleId, targetLength, lang: rawLang } = req.body as {
+    const { title, styleId, sceneId, targetLength, lang: rawLang } = req.body as {
       title?: string;
       styleId?: string;
+      sceneId?: string;
       targetLength?: "short" | "medium" | "long";
       lang?: string;
     };
@@ -117,6 +120,7 @@ router.post("/api/article/generate-from-title", async (req, res) => {
       domain: matchedDomain.domain,
       topic,
       styleId,
+      sceneId,
       targetLength,
       lang,
     });
@@ -138,6 +142,7 @@ async function generateArticlePayload(input: {
   domain: ArticleDomain;
   topic: TopicOption | string;
   styleId?: string;
+  sceneId?: string;
   targetLength?: "short" | "medium" | "long";
   lang: Lang;
 }) {
@@ -148,7 +153,10 @@ async function generateArticlePayload(input: {
   const bundleWithImages = { ...bundle, items: imageItems };
   const researchContext = formatResearchContext(bundleWithImages.items, 8);
   const builtin = input.styleId ? getBuiltinStyle(input.styleId, lang) : undefined;
-  const styleSummary = builtin?.profile ?? tr(ARTICLE_LABELS.defaultStyleSummary, lang);
+  const sceneProfile = writingSceneProfile(input.sceneId, lang);
+  const styleSummary = [sceneProfile, builtin?.profile ?? tr(ARTICLE_LABELS.defaultStyleSummary, lang)]
+    .filter(Boolean)
+    .join("\n\n");
   const draft = await generateArticleDraft({
     domainName: input.domain.name,
     topic: input.topic,
@@ -157,7 +165,7 @@ async function generateArticlePayload(input: {
     researchContext,
     lang,
   });
-  const article = enrichArticleWithResearch(draft, bundleWithImages.items, new Date(bundle.generatedAt), lang);
+  const article = await enrichArticleWithResearch(draft, bundleWithImages.items, new Date(bundle.generatedAt), lang);
 
   const docx = await createDocxFromBlocks(articleToDocBlocks(article, lang));
   const parsed = await parseDocx(docx);

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useStore } from "../../lib/store.js";
 import { CloudUp, SamplesIcon, WordIcon } from "../common/icons.js";
 import { messages } from "../../lib/i18n.js";
+import type { WritingSceneId } from "../../lib/api.js";
 
 /** "Rewrite Word" entry view: pick a docx + style/samples, then upload & parse. */
 export default function UploadPanel() {
@@ -13,6 +14,7 @@ export default function UploadPanel() {
   const [target, setTarget] = useState<File | null>(null);
   const [refs, setRefs] = useState<File[]>([]);
   const [styleId, setStyleId] = useState("");
+  const [sceneId, setSceneId] = useState<WritingSceneId>("general");
 
   useEffect(() => {
     loadStyles();
@@ -68,6 +70,19 @@ export default function UploadPanel() {
         </select>
         {picked && <p className="hint pick-desc">{picked.desc}</p>}
 
+        <select
+          className="styleselect"
+          aria-label={t.sceneLabel}
+          value={sceneId}
+          onChange={(e) => setSceneId(e.target.value as WritingSceneId)}
+        >
+          {sceneOptions(t).map((scene) => (
+            <option key={scene.id} value={scene.id}>
+              {scene.label}
+            </option>
+          ))}
+        </select>
+
         <label className="filepill">
           <span className="ftype txt">
             <SamplesIcon />
@@ -93,7 +108,7 @@ export default function UploadPanel() {
         <button
           className="cta"
           disabled={!target}
-          onClick={() => target && doUpload(target, refs, styleId)}
+          onClick={() => target && doUpload(target, refs, styleId, sceneId)}
         >
           <CloudUp />
           {t.uploadAndParse}
@@ -101,4 +116,16 @@ export default function UploadPanel() {
       </div>
     </div>
   );
+}
+
+function sceneOptions(t: (typeof messages)["en"]): { id: WritingSceneId; label: string }[] {
+  return [
+    { id: "general", label: `${t.sceneLabel}: ${t.sceneGeneral}` },
+    { id: "wechat", label: `${t.sceneLabel}: ${t.sceneWechat}` },
+    { id: "business", label: `${t.sceneLabel}: ${t.sceneBusiness}` },
+    { id: "academic", label: `${t.sceneLabel}: ${t.sceneAcademic}` },
+    { id: "official", label: `${t.sceneLabel}: ${t.sceneOfficial}` },
+    { id: "social", label: `${t.sceneLabel}: ${t.sceneSocial}` },
+    { id: "technical", label: `${t.sceneLabel}: ${t.sceneTechnical}` },
+  ];
 }

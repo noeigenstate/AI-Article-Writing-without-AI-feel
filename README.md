@@ -4,7 +4,7 @@
 
 **Turn AI-shaped drafts into writing that reads like a person wrote it.**
 
-Open-source AI writing workbench for **Word rewriting**, **human-likeness scoring**, and **source-backed article generation**. It works in English and Chinese.
+Open-source AI writing workbench for **Word rewriting**, **human-likeness scoring**, **source-backed article generation**, and **WeChat Official Account formatting**. It works in English and Chinese.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-22a06b.svg)](LICENSE)
 ![Node](https://img.shields.io/badge/Node-%E2%89%A518-339933?logo=node.js&logoColor=white)
@@ -19,12 +19,12 @@ Open-source AI writing workbench for **Word rewriting**, **human-likeness scorin
 
 ## At A Glance
 
-| Rewrite Word | Generate Articles |
-| --- | --- |
-| <img src="assets/screenshots/01-rewrite.png" alt="Rewrite Word page" /> | <img src="assets/screenshots/02-generate.png" alt="Generate article page" /> |
+| Rewrite Word | Generate Articles | WeChat Formatting |
+| --- | --- | --- |
+| <img src="assets/screenshots/01-rewrite.png" alt="Rewrite Word page" /> | <img src="assets/screenshots/02-generate.png" alt="Generate article page" /> | <img src="assets/screenshots/03-gzh.png" alt="WeChat formatting page" /> |
 
 <div align="center">
-  <sub>A light SaaS-style workspace: Word rewriting, progress logs, and source-backed article generation behind one sidebar.</sub>
+  <sub>A light SaaS-style workspace: Word rewriting, source-backed article generation, and WeChat-ready formatting behind one sidebar.</sub>
 </div>
 
 ## What It Does
@@ -35,6 +35,7 @@ Open-source AI writing workbench for **Word rewriting**, **human-likeness scorin
 - **Learn your style** from uploaded `.docx` or `.txt` samples.
 - **Show progress while the model works** for article writing, whole-document rewriting, title options, and topic generation.
 - **Generate an article from a title or domain** with arXiv papers, RSS news sources, and optional Agent-Reach / Exa web search.
+- **Auto-format generated articles for the WeChat Official Account editor**: pick a visual theme in the article editor, click Auto-format, then copy the result straight into 公众号 with one click.
 - **Run privately** with any OpenAI-compatible endpoint, including local model servers.
 
 ## Basic Environment
@@ -144,7 +145,17 @@ Article generation can collect live context from arXiv, RSS feeds, and optional 
 
 Current enabled RSS sources include NPR World, France 24, CNBC World, UN News, TechCrunch, Ars Technica, Wired, MIT Technology Review, Engadget, Hacker News via HNRSS, CNBC Top News, MarketWatch, and 36Kr.
 
-The Agent-Reach integration currently uses its Exa/mcporter search path as a broad web source. Reddit, X/Twitter, Xiaohongshu, and similar logged-in social channels require credentials/cookies and are intentionally not switched on automatically.
+The Agent-Reach integration currently uses its Exa/mcporter search path as a broad web source; on Windows the call goes through cmd.exe with proper argument quoting, so it works the same as on macOS/Linux. Reddit, X/Twitter, Xiaohongshu, and similar logged-in social channels require credentials/cookies and are intentionally not switched on automatically.
+
+Inline `[n]` citations appear only where the model actually cited a reference — markers pointing at nonexistent references are stripped rather than fabricated. When the lead figure uses a real source image, the image is downloaded and embedded into the exported Word file (Word does not load external image URLs).
+
+## WeChat Formatting (公众号排版)
+
+After generating an article, the editor shows a formatting bar: pick a theme from the dropdown, click **Auto-format**, and the article is converted into HTML that survives pasting into the WeChat Official Account editor — inline styles only, every text node wrapped in `<span leaf="">`, no `<div>`/`class`/`id`, full-width punctuation in prose.
+
+- **Six themes** built on [gzh-design-skill](https://github.com/isjiamu/gzh-design-skill) component libraries: 翡翠清新, 红白杂志, 石墨极简, 禅意留白, 创意票据, 橄榄内刊. Each theme defines the cover, chapter titles, quote cards, and signature that the model assembles per chapter.
+- **Compliance validation** is deterministic (ported from the skill's Python validator): forbidden tags/styles are errors, unwrapped text and half-width punctuation are warnings, and failing chunks get one automatic repair pass.
+- **One-click paste**: the live preview renders the exact rich text; “复制到公众号” puts it on the clipboard for direct pasting, and the HTML download is a standalone preview page with its own copy button.
 
 ## Private Local Mode
 
@@ -178,11 +189,12 @@ npm run test:progress
 ```text
 backend/
   src/routes/      API endpoints
-  src/services/    rewrite, article, docx, score, research
+  src/services/    rewrite, article, docx, score, research, gzh formatting
   src/prompts/     model prompts
+  assets/gzh/      WeChat theme component libraries (from gzh-design-skill)
 
 frontend/
-  src/components/  upload, generate, editor, common UI
+  src/components/  upload, generate, gzh, editor, common UI
   src/lib/         API client, store, i18n
   src/styles.css   light workspace theme (sidebar, hero, cards)
 
@@ -199,4 +211,13 @@ docs/                design notes
 
 ## License
 
-[MIT](LICENSE)
+This project's own code is under [MIT](LICENSE).
+
+> **⚠️ Important — bundled AGPL-3.0 content.** The WeChat formatting feature integrates theme component libraries and validation rules from [gzh-design-skill](https://github.com/isjiamu/gzh-design-skill) by 甲木 (Jiamu) × 摸鱼小李 (Moyu Xiaoli), licensed under **AGPL-3.0** (full text: `backend/assets/gzh/LICENSE`).
+
+What that means in practice:
+
+- **Personal / internal use**: no extra obligations — use and modify freely.
+- **Attribution**: keep the upstream copyright notice and `backend/assets/gzh/LICENSE` in place (already done here).
+- **Redistributing this repo (including a public fork)**: the bundled theme libraries stay AGPL-3.0, and a combined work that includes them must be conveyed under AGPL-3.0 terms. Practically, either license your distribution as AGPL-3.0 overall (MIT code can be included in an AGPL whole), remove/replace the `backend/assets/gzh/` content, or obtain separate permission from the upstream authors.
+- **Offering this app as a public network service** (AGPL §13): you must offer users of that service the complete corresponding source of your running (possibly modified) version.

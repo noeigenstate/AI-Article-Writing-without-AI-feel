@@ -34,32 +34,7 @@ export const SERVER_MESSAGES = {
 /** 生成文章里的结构性文案（标题、表格、图注等） / Structural labels in generated articles */
 export const ARTICLE_LABELS = {
   references: { en: "References", zh: "参考文献" },
-  evidenceTableTitle: {
-    en: "Table 1. Key evidence and sources",
-    zh: "表1 主要证据与出处",
-  },
-  evidenceTableNote: {
-    en: "Note: evidence is limited to public sources found in this search; claims may not exceed this material.",
-    zh: "注：表中论据只来自本次检索到的公开来源；正文判断不得超出这些材料。",
-  },
-  evidenceTableEmpty: {
-    en: "No usable sources were returned in this search; the article must not state specific data claims.",
-    zh: "本次检索没有返回可用资料，文章不得写具体数据判断。",
-  },
-  typePaper: { en: "Paper", zh: "论文" },
-  typeNews: { en: "News", zh: "新闻" },
-  figureSourceTitle: { en: "Figure 1. Source image", zh: "图1 来源图片" },
-  figureChainTitle: { en: "Figure 1. Evidence chain", zh: "图1 证据链路图" },
-  figureChainCaption: {
-    en: "Figure 1. Argument chain built from retrieved sources. Every claim must map back to a source; do not present speculation as fact.",
-    zh: "图1 基于检索来源形成的论证链路。每个判断必须回到对应来源，不能把推测写成事实。",
-  },
-  noLiveSource: { en: "No live source available", zh: "无可用实时来源" },
-  needSecondSource: { en: "A second source is needed", zh: "需补充第二来源" },
-  conclusionNode: {
-    en: "State only what the material supports",
-    zh: "只给出材料能支撑的结论",
-  },
+  figureSourceWord: { en: "Source image", zh: "来源图片" },
   defaultAudience: { en: "general readers", zh: "公众号读者" },
   titleAngle: {
     en: "Develop around the user's title; domain auto-matched to: ",
@@ -71,19 +46,6 @@ export const ARTICLE_LABELS = {
     zh: "公众号文章生成：去 AI 味、短句优先、信息密度高。",
   },
 } satisfies Record<string, Bi>;
-
-/** 证据链节点标签 / evidence-chain node labels */
-export const CHAIN_NODE_LABELS = {
-  problem: { en: "Problem", zh: "问题" },
-  evidence: { en: "Evidence", zh: "证据" },
-  crossCheck: { en: "Cross-check", zh: "交叉验证" },
-  judgment: { en: "Judgment", zh: "判断" },
-} satisfies Record<string, Bi>;
-
-export const EVIDENCE_TABLE_COLUMNS: Record<Lang, string[]> = {
-  en: ["Ref", "Type", "Source", "Date", "Verifiable point"],
-  zh: ["引用", "类型", "来源", "日期", "可验证论据"],
-};
 
 /**
  * Resolve a bilingual label to the given language.

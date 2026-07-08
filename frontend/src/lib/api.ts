@@ -76,6 +76,7 @@ export interface ResearchBundleDTO {
 }
 
 export type TargetLength = "short" | "medium" | "long";
+export type WritingSceneId = "general" | "wechat" | "business" | "academic" | "official" | "social" | "technical";
 
 export type ArticleRenderBlockDTO =
   | { type: "paragraph"; kind: string; text: string; paragraphIndex?: number }
@@ -143,13 +144,14 @@ export async function generateArticle(
   customDomain: string,
   topic: TopicOptionDTO,
   styleId: string,
+  sceneId: WritingSceneId,
   targetLength: TargetLength,
   lang: Lang = "en"
 ) {
   const res = await fetch(`${BASE}/article/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ domainId, customDomain, topic, styleId, targetLength, lang }),
+    body: JSON.stringify({ domainId, customDomain, topic, styleId, sceneId, targetLength, lang }),
   });
   if (!res.ok) throw await apiError(res, "Failed to generate article");
   return res.json() as Promise<GeneratedArticleResponseDTO>;
@@ -159,24 +161,26 @@ export async function generateArticle(
 export async function generateArticleFromTitle(
   title: string,
   styleId: string,
+  sceneId: WritingSceneId,
   targetLength: TargetLength,
   lang: Lang = "en"
 ) {
   const res = await fetch(`${BASE}/article/generate-from-title`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title, styleId, targetLength, lang }),
+    body: JSON.stringify({ title, styleId, sceneId, targetLength, lang }),
   });
   if (!res.ok) throw await apiError(res, "Failed to generate article from title");
   return res.json() as Promise<GeneratedArticleResponseDTO>;
 }
 
 /** Upload the target docx plus optional sample files; returns parsed structure. */
-export async function uploadFiles(target: File, references: File[], styleId = "", lang: Lang = "en") {
+export async function uploadFiles(target: File, references: File[], styleId = "", sceneId: WritingSceneId = "general", lang: Lang = "en") {
   const fd = new FormData();
   fd.append("file", target);
   references.forEach((r) => fd.append("references", r));
   if (styleId) fd.append("styleId", styleId);
+  fd.append("sceneId", sceneId);
   fd.append("lang", lang);
   const res = await fetch(`${BASE}/upload`, { method: "POST", body: fd });
   if (!res.ok) throw await apiError(res, "Upload failed");
@@ -192,7 +196,32 @@ export async function uploadFiles(target: File, references: File[], styleId = ""
 export interface AiScoreDTO {
   score: number;
   level: "low" | "medium" | "high";
-  signals: { id: string; label: string; hits: number; points: number }[];
+  signals: ScoreSignalDTO[];
+}
+
+export type ScoreLayerDTO = "wording" | "sentence" | "structure" | "rhythm" | "evidence" | "format";
+
+export interface ScoreSignalDTO {
+  id: string;
+  label: string;
+  hits: number;
+  points: number;
+  layer?: ScoreLayerDTO;
+  suggestion?: string;
+  examples?: { text: string; start: number; end: number }[];
+}
+
+export interface DiagnosticReportDTO extends AiScoreDTO {
+  summary: string;
+  issues: {
+    id: string;
+    layer: ScoreLayerDTO;
+    label: string;
+    hits: number;
+    points: number;
+    suggestion: string;
+    examples: { text: string; start: number; end: number }[];
+  }[];
 }
 
 /** De-AI the whole document; returns paragraphs and before/after scores. */
@@ -203,7 +232,7 @@ export async function rewriteDoc(docId: string, lang: Lang = "en") {
     body: JSON.stringify({ docId, lang }),
   });
   if (!res.ok) throw await apiError(res, "Rewrite failed");
-  return res.json() as Promise<{ paragraphs: ParagraphDTO[]; score?: { before: AiScoreDTO; after: AiScoreDTO } }>;
+  return res.json() as Promise<{ paragraphs: ParagraphDTO[]; score?: { before: DiagnosticReportDTO; after: DiagnosticReportDTO } }>;
 }
 
 /** Score text for human-likeness via the local (no-model) backend endpoint. */
@@ -215,6 +244,17 @@ export async function scoreText(text: string, lang: Lang = "en") {
   });
   if (!res.ok) throw await apiError(res, "Score failed");
   return res.json() as Promise<AiScoreDTO>;
+}
+
+/** Return an explainable local diagnosis without rewriting the document. */
+export async function diagnoseText(text: string, lang: Lang = "en") {
+  const res = await fetch(`${BASE}/diagnose`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, lang }),
+  });
+  if (!res.ok) throw await apiError(res, "Diagnosis failed");
+  return res.json() as Promise<DiagnosticReportDTO>;
 }
 
 /** Fetch N title candidates for a document (empty array on failure). */
@@ -243,6 +283,42 @@ export async function fetchAlternatives(
   });
   if (!res.ok) throw await apiError(res, "Failed to generate alternatives");
   return (await res.json()).alternatives as string[];
+}
+
+/** A registered 公众号 formatting theme (color swatch + usage scene). */
+export interface GzhThemeDTO {
+  id: string;
+  name: string;
+  primary: string;
+  accent?: string;
+  scene: string;
+}
+
+/** Result of formatting an article into WeChat-ready HTML. */
+export interface GzhFormatResponseDTO {
+  html: string;
+  title: string;
+  themeId: string;
+  themeName: string;
+  validation: { errors: string[]; warnings: string[]; leafCount: number };
+}
+
+/** Fetch the registered 公众号 formatting themes (empty array on failure). */
+export async function fetchGzhThemes(lang: Lang) {
+  const res = await fetch(`${BASE}/gzh/themes?lang=${lang}`);
+  if (!res.ok) return [] as GzhThemeDTO[];
+  return (await res.json()).themes as GzhThemeDTO[];
+}
+
+/** Format a Markdown article into paste-ready 公众号 HTML. */
+export async function formatGzhArticle(markdown: string, themeId: string, author: string, lang: Lang = "en") {
+  const res = await fetch(`${BASE}/gzh/format`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ markdown, themeId, author, lang }),
+  });
+  if (!res.ok) throw await apiError(res, "Formatting failed");
+  return res.json() as Promise<GzhFormatResponseDTO>;
 }
 
 /** Export the edited document to docx and trigger a browser download. */

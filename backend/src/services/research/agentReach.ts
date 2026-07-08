@@ -34,14 +34,18 @@ export function parseAgentReachSearchOutput(output: string, query: string): Rese
 
 /** Collect web search results via Agent-Reach's Exa/mcporter backend when available. */
 export function fetchAgentReachSearch(query: string, limit = 6): Promise<ResearchItem[]> {
-  const cleanQuery = query.trim();
+  // 引号和 % 对搜索无意义，却会破坏 JSON 引号包装 / 被 cmd 变量展开，直接去掉
+  const cleanQuery = query.replace(/["%]/g, " ").replace(/\s+/g, " ").trim();
   if (!cleanQuery) {
     return Promise.resolve([]);
   }
 
   return cached(`agent-reach:${cleanQuery}:${limit}`, 20 * 60 * 1000, async () => {
     const expression = `exa.web_search_exa(query: ${JSON.stringify(cleanQuery)}, numResults: ${limit})`;
-    const { stdout } = await execFileAsync("mcporter", ["call", expression], mcporterExecOptions());
+    const opts = mcporterExecOptions();
+    // shell 模式下 Node 不做任何引号处理，必须自己把表达式包成单个参数
+    const args = ["call", opts.shell ? quoteForWindowsShell(expression) : expression];
+    const { stdout } = await execFileAsync("mcporter", args, opts);
 
     return parseAgentReachSearchOutput(stdout, cleanQuery).slice(0, limit);
   });
@@ -53,8 +57,17 @@ export function mcporterExecOptions(platform: NodeJS.Platform = process.platform
     timeout: 18_000,
     maxBuffer: 1_000_000,
     windowsHide: true,
+    // Node 22 起 execFile 直接调 .cmd 会抛 EINVAL（CVE-2024-27980），Windows 上必须经 shell
     shell: platform === "win32",
   };
+}
+
+/**
+ * Wrap one argument for cmd.exe so it survives `execFile(..., { shell: true })`,
+ * which joins args with spaces without quoting.
+ */
+export function quoteForWindowsShell(arg: string): string {
+  return `"${arg.replace(/"/g, '\\"')}"`;
 }
 
 function normalizeResult(raw: unknown, query: string): ResearchItem | undefined {

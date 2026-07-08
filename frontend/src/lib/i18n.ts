@@ -51,6 +51,14 @@ export interface Dict {
   chooseStyleTitle: string;
   styleHint: string;
   styleNone: string;
+  sceneLabel: string;
+  sceneGeneral: string;
+  sceneWechat: string;
+  sceneBusiness: string;
+  sceneAcademic: string;
+  sceneOfficial: string;
+  sceneSocial: string;
+  sceneTechnical: string;
   uploadSamples: string;
   selectedSamples: (n: number) => string;
   noSamples: string;
@@ -78,6 +86,18 @@ export interface Dict {
   sourceCount: (n: number) => string;
   unavailableSources: (list: string) => string;
   generateArticleBtn: string;
+  // gzh export panel (公众号排版)
+  gzhPanelTitle: string;
+  gzhFormatBtn: string;
+  gzhFormatting: string;
+  gzhCopyBtn: string;
+  gzhCopied: string;
+  gzhCopyFail: string;
+  gzhDownloadBtn: string;
+  gzhValidationOk: string;
+  gzhValidationWarn: (n: number) => string;
+  gzhValidationErr: (n: number) => string;
+  gzhPreviewNote: string;
   // doc editor / popover
   clickRetitle: string;
   clickRephrase: string;
@@ -106,6 +126,16 @@ export interface Dict {
   scoreRemoved: (n: number) => string;
   scoreClean: string;
   rescore: string;
+  diagnose: string;
+  diagnosisTitle: string;
+  diagnosisSummary: string;
+  diagnosisSuggestion: string;
+  diagnosisExamples: string;
+  diagnosisNoExamples: string;
+  diagnosisLayer: (layer: string) => string;
+  remainingIssuesTitle: string;
+  remainingIssuesHint: string;
+  continuePolishHint: string;
   // store busy
   busyParsing: string;
   busyGenerating: string;
@@ -117,6 +147,7 @@ export interface Dict {
   progressArticleTopicSteps: string[];
   progressRewriteSteps: string[];
   progressTitleCandidateSteps: string[];
+  progressGzhSteps: string[];
   progressPercent: (n: number) => string;
   // locale for dates
   dateLocale: string;
@@ -146,6 +177,14 @@ const en: Dict = {
   chooseStyleTitle: "Choose a rewrite style",
   styleHint: "Use a built-in style, or upload your own samples, or stack both.",
   styleNone: "None (de-AI only) / use samples below",
+  sceneLabel: "Writing scene",
+  sceneGeneral: "General",
+  sceneWechat: "Newsletter",
+  sceneBusiness: "Business",
+  sceneAcademic: "Academic / report",
+  sceneOfficial: "Formal notice",
+  sceneSocial: "Social post",
+  sceneTechnical: "Technical docs",
   uploadSamples: "Upload samples",
   selectedSamples: (n) => `${n} sample${n > 1 ? "s" : ""} selected`,
   noSamples: "None chosen (optional, .docx / .txt)",
@@ -172,6 +211,17 @@ const en: Dict = {
   sourceCount: (n) => `${n} source${n > 1 ? "s" : ""}`,
   unavailableSources: (list) => `Some sources are unavailable: ${list}`,
   generateArticleBtn: "Generate article",
+  gzhPanelTitle: "WeChat formatting",
+  gzhFormatBtn: "Auto-format",
+  gzhFormatting: "Formatting…",
+  gzhCopyBtn: "Copy to WeChat editor",
+  gzhCopied: "Copied! Paste with Ctrl/⌘+V in the WeChat editor",
+  gzhCopyFail: "Auto-copy failed — select all inside the preview and copy manually",
+  gzhDownloadBtn: "Download HTML",
+  gzhValidationOk: "Compliance check passed — safe to paste",
+  gzhValidationWarn: (n) => `${n} warning${n > 1 ? "s" : ""} to review`,
+  gzhValidationErr: (n) => `${n} blocking issue${n > 1 ? "s" : ""} found`,
+  gzhPreviewNote: "Preview below renders exactly what gets copied.",
   clickRetitle: "Click to retitle",
   clickRephrase: "Click to rephrase / edit",
   viewSource: "View source",
@@ -198,6 +248,24 @@ const en: Dict = {
   scoreRemoved: (n) => `${n} removed`,
   scoreClean: "No obvious AI tells deducted.",
   rescore: "Re-score",
+  diagnose: "Diagnose AI tells",
+  diagnosisTitle: "Diagnosis report",
+  diagnosisSummary: "Summary",
+  diagnosisSuggestion: "Suggestion",
+  diagnosisExamples: "Evidence",
+  diagnosisNoExamples: "No direct phrase evidence; this is a whole-text signal.",
+  diagnosisLayer: (layer) =>
+    ({
+      wording: "Wording",
+      sentence: "Sentence",
+      structure: "Structure",
+      rhythm: "Rhythm",
+      evidence: "Evidence",
+      format: "Format",
+    }[layer] ?? layer),
+  remainingIssuesTitle: "Remaining issues after rewrite",
+  remainingIssuesHint: "The rewrite improved the text, but these signals still remain.",
+  continuePolishHint: "You can polish the whole document again, or edit the listed paragraphs by hand.",
   busyParsing: "Parsing document, extracting style…",
   busyGenerating: "Writing the article…",
   busyMatching: "Matching domain and writing the article…",
@@ -235,6 +303,13 @@ const en: Dict = {
     "Checking tone and length",
     "Preparing title choices",
   ],
+  progressGzhSteps: [
+    "Parsing the article structure",
+    "Laying out cover and intro",
+    "Formatting chapters with theme components",
+    "Running the compliance check",
+    "Assembling the final HTML",
+  ],
   progressPercent: (n) => `${n}%`,
   dateLocale: "en-US",
 };
@@ -261,6 +336,14 @@ const zh: Dict = {
   chooseStyleTitle: "选择改写风格",
   styleHint: "用内置「我的风格」，或上传范文，或两者叠加。",
   styleNone: "不指定（仅去 AI 味）/ 用下方范文",
+  sceneLabel: "文体场景",
+  sceneGeneral: "通用",
+  sceneWechat: "公众号",
+  sceneBusiness: "商务沟通",
+  sceneAcademic: "学术/报告",
+  sceneOfficial: "公文/正式说明",
+  sceneSocial: "社媒短文",
+  sceneTechnical: "技术文档",
   uploadSamples: "上传范文",
   selectedSamples: (n) => `已选 ${n} 篇范文`,
   noSamples: "未选择（可选，.docx / .txt）",
@@ -287,6 +370,17 @@ const zh: Dict = {
   sourceCount: (n) => `${n} 条来源`,
   unavailableSources: (list) => `部分来源暂不可用：${list}`,
   generateArticleBtn: "一键生成文章",
+  gzhPanelTitle: "公众号排版",
+  gzhFormatBtn: "自动排版",
+  gzhFormatting: "排版中…",
+  gzhCopyBtn: "复制到公众号",
+  gzhCopied: "已复制！到公众号编辑器按 Ctrl/⌘+V 粘贴即可",
+  gzhCopyFail: "自动复制失败，请在预览里手动全选后复制",
+  gzhDownloadBtn: "下载 HTML",
+  gzhValidationOk: "合规校验通过，可直接粘贴",
+  gzhValidationWarn: (n) => `${n} 条提醒建议检查`,
+  gzhValidationErr: (n) => `发现 ${n} 个阻断问题`,
+  gzhPreviewNote: "下方预览即最终复制内容。",
   clickRetitle: "点击重拟标题",
   clickRephrase: "点击换个说法 / 编辑",
   viewSource: "查看来源",
@@ -313,6 +407,24 @@ const zh: Dict = {
   scoreRemoved: (n) => `消除 ${n} 处`,
   scoreClean: "未发现明显 AI 痕迹扣分。",
   rescore: "重新评分",
+  diagnose: "诊断 AI 味",
+  diagnosisTitle: "诊断报告",
+  diagnosisSummary: "概览",
+  diagnosisSuggestion: "建议",
+  diagnosisExamples: "证据",
+  diagnosisNoExamples: "这类是全文信号，没有直接短语证据。",
+  diagnosisLayer: (layer) =>
+    ({
+      wording: "用词",
+      sentence: "句式",
+      structure: "结构",
+      rhythm: "节奏",
+      evidence: "证据",
+      format: "格式",
+    }[layer] ?? layer),
+  remainingIssuesTitle: "改写后的残留问题",
+  remainingIssuesHint: "文本已经完成一轮润色，但仍有这些 AI 味信号。",
+  continuePolishHint: "可以再次点击整篇润色，或按这些问题手动微调段落。",
   busyParsing: "解析文档、提取风格中…",
   busyGenerating: "正在生成文章…",
   busyMatching: "正在判断领域并生成文章…",
@@ -349,6 +461,13 @@ const zh: Dict = {
     "正在生成标题候选",
     "正在检查语气和长度",
     "正在整理标题选项",
+  ],
+  progressGzhSteps: [
+    "正在解析文章结构",
+    "正在排版封面与引言",
+    "正在按主题组件排版章节",
+    "正在做公众号合规校验",
+    "正在装配完整排版",
   ],
   progressPercent: (n) => `${n}%`,
   dateLocale: "zh-CN",

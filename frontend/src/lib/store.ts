@@ -7,15 +7,18 @@ import {
   fetchArticleDomains,
   generateArticle,
   generateArticleFromTitle,
+  diagnoseText,
   scoreText,
   type ArticleRenderBlockDTO,
   type ArticleDomainDTO,
   type AiScoreDTO,
+  type DiagnosticReportDTO,
   type ParagraphDTO,
   type ResearchBundleDTO,
   type StyleDTO,
   type TargetLength,
   type TopicOptionDTO,
+  type WritingSceneId,
 } from "./api.js";
 import { getStoredLang, storeLang, messages, type Lang } from "./i18n.js";
 import type { ProgressTask } from "./progress.js";
@@ -36,6 +39,7 @@ interface WorkspaceState {
   research: ResearchBundleDTO | null;
   aiScore: { before: AiScoreDTO; after: AiScoreDTO } | null;
   currentScore: AiScoreDTO | null;
+  diagnosis: DiagnosticReportDTO | null;
 }
 
 /** The global app state plus the actions that mutate it (Zustand store shape). */
@@ -56,23 +60,26 @@ interface State {
   research: ResearchBundleDTO | null;
   aiScore: { before: AiScoreDTO; after: AiScoreDTO } | null; // 改写前后对照
   currentScore: AiScoreDTO | null; // 当前文档（含手动编辑）的实时分
+  diagnosis: DiagnosticReportDTO | null;
   workspaces: Record<Mode, WorkspaceState>;
 
   setLang: (lang: Lang) => void;
   recomputeScore: (mode?: Mode) => Promise<void>;
+  diagnoseCurrent: () => Promise<void>;
   setMode: (mode: Mode) => void;
   setResearch: (research: ResearchBundleDTO | null, mode?: Mode) => void;
   loadStyles: () => Promise<void>;
   loadArticleDomains: () => Promise<void>;
-  doUpload: (target: File, refs: File[], styleId: string) => Promise<void>;
+  doUpload: (target: File, refs: File[], styleId: string, sceneId: WritingSceneId) => Promise<void>;
   doGenerateArticle: (
     domainId: string,
     customDomain: string,
     topic: TopicOptionDTO,
     styleId: string,
+    sceneId: WritingSceneId,
     targetLength: TargetLength
   ) => Promise<void>;
-  doGenerateArticleFromTitle: (title: string, styleId: string, targetLength: TargetLength) => Promise<void>;
+  doGenerateArticleFromTitle: (title: string, styleId: string, sceneId: WritingSceneId, targetLength: TargetLength) => Promise<void>;
   doRewrite: () => Promise<void>;
   setSentence: (paraIndex: number, sentenceIdx: number, text: string) => void;
   setParagraph: (paraIndex: number, text: string) => void;
@@ -93,6 +100,7 @@ const emptyWorkspace = (): WorkspaceState => ({
   research: null,
   aiScore: null,
   currentScore: null,
+  diagnosis: null,
 });
 
 function workspaceFromState(s: State): WorkspaceState {
@@ -109,6 +117,7 @@ function workspaceFromState(s: State): WorkspaceState {
     research: s.research,
     aiScore: s.aiScore,
     currentScore: s.currentScore,
+    diagnosis: s.diagnosis,
   };
 }
 
@@ -157,6 +166,20 @@ export const useStore = create<State>((set, get) => ({
     }
   },
 
+  async diagnoseCurrent() {
+    const mode = get().mode;
+    const { paragraphs, lang } = get();
+    const text = paragraphs.map((p) => p.sentences.join("")).join("\n");
+    if (!text.trim()) return set((s) => workspacePatch(s, mode, { diagnosis: null }));
+    set((s) => workspacePatch(s, mode, { error: null }));
+    try {
+      const diagnosis = await diagnoseText(text, lang);
+      set((s) => workspacePatch(s, mode, { diagnosis, currentScore: diagnosis }));
+    } catch (e) {
+      set((s) => workspacePatch(s, mode, { error: (e as Error).message }));
+    }
+  },
+
   setLang(lang) {
     storeLang(lang);
     set({ lang });
@@ -190,11 +213,11 @@ export const useStore = create<State>((set, get) => ({
     set({ articleDomains: await fetchArticleDomains(get().lang) });
   },
 
-  async doUpload(target, refs, styleId) {
+  async doUpload(target, refs, styleId, sceneId) {
     const mode = get().mode;
     set((s) => workspacePatch(s, mode, { busy: messages[get().lang].busyParsing, error: null }));
     try {
-      const r = await uploadFiles(target, refs, styleId, get().lang);
+      const r = await uploadFiles(target, refs, styleId, sceneId, get().lang);
       set((s) => workspacePatch(s, mode, {
         docId: r.docId,
         styleSummary: r.styleSummary,
@@ -204,6 +227,7 @@ export const useStore = create<State>((set, get) => ({
         research: null,
         aiScore: null,
         currentScore: null,
+        diagnosis: null,
         step: "ready",
         busy: null,
         progress: null,
@@ -214,11 +238,11 @@ export const useStore = create<State>((set, get) => ({
     }
   },
 
-  async doGenerateArticle(domainId, customDomain, topic, styleId, targetLength) {
+  async doGenerateArticle(domainId, customDomain, topic, styleId, sceneId, targetLength) {
     const mode = get().mode;
     set((s) => workspacePatch(s, mode, { busy: messages[get().lang].busyGenerating, progress: startProgress("article"), error: null }));
     try {
-      const r = await generateArticle(domainId, customDomain, topic, styleId, targetLength, get().lang);
+      const r = await generateArticle(domainId, customDomain, topic, styleId, sceneId, targetLength, get().lang);
       set((s) => workspacePatch(s, mode, {
         docId: r.docId,
         styleSummary: r.styleSummary,
@@ -228,6 +252,7 @@ export const useStore = create<State>((set, get) => ({
         research: r.research ?? null,
         aiScore: null,
         currentScore: null,
+        diagnosis: null,
         step: "ready",
         busy: null,
         progress: null,
@@ -238,11 +263,11 @@ export const useStore = create<State>((set, get) => ({
     }
   },
 
-  async doGenerateArticleFromTitle(title, styleId, targetLength) {
+  async doGenerateArticleFromTitle(title, styleId, sceneId, targetLength) {
     const mode = get().mode;
     set((s) => workspacePatch(s, mode, { busy: messages[get().lang].busyMatching, progress: startProgress("articleFromTitle"), error: null }));
     try {
-      const r = await generateArticleFromTitle(title, styleId, targetLength, get().lang);
+      const r = await generateArticleFromTitle(title, styleId, sceneId, targetLength, get().lang);
       set((s) => workspacePatch(s, mode, {
         docId: r.docId,
         styleSummary: r.styleSummary,
@@ -252,6 +277,7 @@ export const useStore = create<State>((set, get) => ({
         research: r.research ?? null,
         aiScore: null,
         currentScore: null,
+        diagnosis: null,
         step: "ready",
         busy: null,
         progress: null,
@@ -274,6 +300,7 @@ export const useStore = create<State>((set, get) => ({
         renderBlocks: s.mode === mode ? s.renderBlocks : s.workspaces[mode].renderBlocks,
         aiScore: r.score ?? null,
         currentScore: r.score?.after ?? (s.mode === mode ? s.currentScore : s.workspaces[mode].currentScore),
+        diagnosis: null,
         busy: null,
         progress: null,
       }));
@@ -290,6 +317,7 @@ export const useStore = create<State>((set, get) => ({
           ? { ...p, sentences: p.sentences.map((x, i) => (i === sentenceIdx ? text : x)) }
           : p
       ),
+      diagnosis: null,
     }));
   },
 
@@ -299,6 +327,7 @@ export const useStore = create<State>((set, get) => ({
       paragraphs: s.paragraphs.map((p) =>
         p.index === paraIndex ? { ...p, sentences: [text] } : p
       ),
+      diagnosis: null,
     }));
   },
 

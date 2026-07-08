@@ -9,10 +9,10 @@ import type { ResearchItem } from "./types.js";
  * ignored so enrichment never blocks generation.
  *
  * @param items Research items.
- * @param limit Max items to attempt (default 6).
+ * @param limit Max items to attempt (default 12).
  * @returns The items, with `imageUrl` filled in where found.
  */
-export async function enrichResearchImages(items: ResearchItem[], limit = 6): Promise<ResearchItem[]> {
+export async function enrichResearchImages(items: ResearchItem[], limit = 12): Promise<ResearchItem[]> {
   const candidates = items.slice(0, limit);
   const imageEntries = await Promise.all(
     candidates.map(async (item) => {

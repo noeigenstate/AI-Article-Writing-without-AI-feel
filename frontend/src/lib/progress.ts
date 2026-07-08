@@ -1,4 +1,4 @@
-export type ProgressTask = "article" | "articleFromTitle" | "articleTopics" | "rewrite" | "titleCandidates";
+export type ProgressTask = "article" | "articleFromTitle" | "articleTopics" | "rewrite" | "titleCandidates" | "gzhFormat";
 
 export interface ProgressPhase {
   durationMs: number;
@@ -49,6 +49,13 @@ export const PROGRESS_PLANS: Record<ProgressTask, readonly ProgressPhase[]> = {
     { durationMs: 8000, targetPercent: 66 },
     { durationMs: 5000, targetPercent: 88 },
     { durationMs: 4000, targetPercent: WAITING_PERCENT },
+  ],
+  gzhFormat: [
+    { durationMs: 8000, targetPercent: 10 },
+    { durationMs: 45000, targetPercent: 42 },
+    { durationMs: 60000, targetPercent: 72 },
+    { durationMs: 45000, targetPercent: 88 },
+    { durationMs: 30000, targetPercent: WAITING_PERCENT },
   ],
 };
 

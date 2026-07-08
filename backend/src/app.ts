@@ -6,6 +6,7 @@ import scoreRoutes from "./routes/score.routes.js";
 import stylesRoutes from "./routes/styles.routes.js";
 import articleRoutes from "./routes/article.routes.js";
 import rewriteRoutes from "./routes/rewrite.routes.js";
+import gzhRoutes from "./routes/gzh.routes.js";
 
 /**
  * Build the Express application: middleware plus all feature routers.
@@ -25,6 +26,7 @@ export function createApp(): Express {
   app.use(stylesRoutes);
   app.use(articleRoutes);
   app.use(rewriteRoutes);
+  app.use(gzhRoutes);
   app.use(apiErrorHandler);
 
   return app;

@@ -6,7 +6,7 @@
  *   npm run test:score -- --rewrite   额外调用模型改写，打印「前 → 后」分数（需有效 Key）
  */
 import assert from "node:assert/strict";
-import { scoreText, type AiScore } from "../services/aiScore.js";
+import { diagnoseText, scoreText, type AiScore } from "../services/aiScore.js";
 import { rewriteDocument } from "../services/rewrite.js";
 import { splitSentences } from "../services/splitter.js";
 import type { Lang } from "../core/i18n.js";
@@ -51,6 +51,12 @@ assert.ok(
     .signals.filter((signal) => signal.id === "opener" || signal.id === "connective")
     .reduce((sum, signal) => sum + signal.hits, 0) <= 1
 );
+
+const diagnostic = diagnoseText("综上所述，AI 赋能行业生态闭环。值得注意的是，这是一种新范式。", "zh");
+assert.ok(diagnostic.summary.includes("人类感"));
+assert.ok(diagnostic.issues.length > 0);
+assert.ok(diagnostic.issues.every((issue) => issue.layer && issue.suggestion));
+assert.ok(diagnostic.issues.some((issue) => issue.examples.some((example) => example.text.includes("综上所述"))));
 
 for (const sample of SAMPLES) {
   console.log(`\n=== ${sample.title} ===`);

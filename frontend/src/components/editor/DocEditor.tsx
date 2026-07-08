@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useStore } from "../../lib/store.js";
+import GzhExportPanel from "./GzhExportPanel.js";
 import RewritePopover from "./SentencePopover.js";
 import { fetchAlternatives, fetchTitles, type ArticleRenderBlockDTO, type ParagraphDTO } from "../../lib/api.js";
 import { messages } from "../../lib/i18n.js";
@@ -172,6 +173,7 @@ export default function DocEditor() {
 
   return (
     <>
+      <GzhExportPanel />
       {compare ? (
         <div className="doc-compare">
           <section className="doc compare-doc">

@@ -1,10 +1,48 @@
 import { useStore } from "../../lib/store.js";
 import { messages } from "../../lib/i18n.js";
-import type { AiScoreDTO } from "../../lib/api.js";
+import type { AiScoreDTO, DiagnosticReportDTO } from "../../lib/api.js";
 
 /** Map a score level to its localized label. */
 function levelText(level: AiScoreDTO["level"], t: (typeof messages)["en"]): string {
   return level === "high" ? t.scoreLevelHigh : level === "medium" ? t.scoreLevelMedium : t.scoreLevelLow;
+}
+
+function DiagnosisReport({ report, t }: { report: DiagnosticReportDTO; t: (typeof messages)["en"] }) {
+  return (
+    <section className="diagnosis-report">
+      <div className="diagnosis-summary">
+        <strong>{t.diagnosisSummary}</strong>
+        <p>{report.summary}</p>
+      </div>
+      {report.issues.length === 0 ? (
+        <p className="score-clean">{t.scoreClean}</p>
+      ) : (
+        <div className="diagnosis-list">
+          {report.issues.map((issue) => (
+            <article className="diagnosis-item" key={issue.id}>
+              <div className="diagnosis-item-head">
+                <span>{t.diagnosisLayer(issue.layer)}</span>
+                <strong>{issue.label}</strong>
+                <small>-{issue.points}</small>
+              </div>
+              <p>
+                <strong>{t.diagnosisSuggestion}: </strong>
+                {issue.suggestion}
+              </p>
+              <div className="diagnosis-examples">
+                <strong>{t.diagnosisExamples}: </strong>
+                {issue.examples.length ? (
+                  issue.examples.map((example) => <code key={`${issue.id}-${example.start}`}>{example.text}</code>)
+                ) : (
+                  <span>{t.diagnosisNoExamples}</span>
+                )}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
 }
 
 /** A single score readout: number + colored progress track. */
@@ -63,11 +101,17 @@ function Stats({ before, after, t }: { before: AiScoreDTO; after?: AiScoreDTO; t
   );
 }
 
+function issuesOf(score: AiScoreDTO | undefined): DiagnosticReportDTO["issues"] {
+  return score && "issues" in score ? (score as DiagnosticReportDTO).issues : [];
+}
+
 /** Score panel shown in the editor: before→after gauges plus the stats breakdown. */
 export default function ScoreBar() {
   const aiScore = useStore((st) => st.aiScore);
   const currentScore = useStore((st) => st.currentScore);
+  const diagnosis = useStore((st) => st.diagnosis);
   const recompute = useStore((st) => st.recomputeScore);
+  const diagnoseCurrent = useStore((st) => st.diagnoseCurrent);
   const lang = useStore((st) => st.lang);
   const t = messages[lang];
 
@@ -85,6 +129,7 @@ export default function ScoreBar() {
         return sum + Math.max(0, s.hits - a);
       }, 0)
     : 0;
+  const remainingIssues = issuesOf(after).slice(0, 4);
 
   const headline = after ?? before;
 
@@ -107,6 +152,9 @@ export default function ScoreBar() {
         <div className="score-meta">
           <span className={`score-pill lvl-${headline.level}`}>{levelText(headline.level, t)}</span>
           {after && totalRemoved > 0 && <span className="score-removed">{t.scoreRemoved(totalRemoved)}</span>}
+          <button className="link score-rescore" onClick={() => void diagnoseCurrent()}>
+            {t.diagnose}
+          </button>
           <button className="link score-rescore" onClick={() => void recompute()}>
             {t.rescore}
           </button>
@@ -117,6 +165,37 @@ export default function ScoreBar() {
         <summary>{t.scoreStatsTitle}</summary>
         <Stats before={before} after={after} t={t} />
       </details>
+
+      {diagnosis && (
+        <details className="score-details diagnosis-details" open>
+          <summary>{t.diagnosisTitle}</summary>
+          <DiagnosisReport report={diagnosis} t={t} />
+        </details>
+      )}
+
+      {after && remainingIssues.length > 0 && (
+        <details className="score-details diagnosis-details" open>
+          <summary>{t.remainingIssuesTitle}</summary>
+          <div className="diagnosis-report">
+            <div className="diagnosis-summary">
+              <strong>{t.remainingIssuesHint}</strong>
+              <p>{t.continuePolishHint}</p>
+            </div>
+            <div className="diagnosis-list">
+              {remainingIssues.map((issue) => (
+                <article className="diagnosis-item" key={`remaining-${issue.id}`}>
+                  <div className="diagnosis-item-head">
+                    <span>{t.diagnosisLayer(issue.layer)}</span>
+                    <strong>{issue.label}</strong>
+                    <small>-{issue.points}</small>
+                  </div>
+                  <p>{issue.suggestion}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+        </details>
+      )}
 
       <p className="score-foot">{t.scoreHint}</p>
     </section>
