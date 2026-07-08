@@ -101,6 +101,10 @@ function Stats({ before, after, t }: { before: AiScoreDTO; after?: AiScoreDTO; t
   );
 }
 
+function issuesOf(score: AiScoreDTO | undefined): DiagnosticReportDTO["issues"] {
+  return score && "issues" in score ? (score as DiagnosticReportDTO).issues : [];
+}
+
 /** Score panel shown in the editor: before→after gauges plus the stats breakdown. */
 export default function ScoreBar() {
   const aiScore = useStore((st) => st.aiScore);
@@ -125,6 +129,7 @@ export default function ScoreBar() {
         return sum + Math.max(0, s.hits - a);
       }, 0)
     : 0;
+  const remainingIssues = issuesOf(after).slice(0, 4);
 
   const headline = after ?? before;
 
@@ -165,6 +170,30 @@ export default function ScoreBar() {
         <details className="score-details diagnosis-details" open>
           <summary>{t.diagnosisTitle}</summary>
           <DiagnosisReport report={diagnosis} t={t} />
+        </details>
+      )}
+
+      {after && remainingIssues.length > 0 && (
+        <details className="score-details diagnosis-details" open>
+          <summary>{t.remainingIssuesTitle}</summary>
+          <div className="diagnosis-report">
+            <div className="diagnosis-summary">
+              <strong>{t.remainingIssuesHint}</strong>
+              <p>{t.continuePolishHint}</p>
+            </div>
+            <div className="diagnosis-list">
+              {remainingIssues.map((issue) => (
+                <article className="diagnosis-item" key={`remaining-${issue.id}`}>
+                  <div className="diagnosis-item-head">
+                    <span>{t.diagnosisLayer(issue.layer)}</span>
+                    <strong>{issue.label}</strong>
+                    <small>-{issue.points}</small>
+                  </div>
+                  <p>{issue.suggestion}</p>
+                </article>
+              ))}
+            </div>
+          </div>
         </details>
       )}
 

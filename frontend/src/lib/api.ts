@@ -232,7 +232,7 @@ export async function rewriteDoc(docId: string, lang: Lang = "en") {
     body: JSON.stringify({ docId, lang }),
   });
   if (!res.ok) throw await apiError(res, "Rewrite failed");
-  return res.json() as Promise<{ paragraphs: ParagraphDTO[]; score?: { before: AiScoreDTO; after: AiScoreDTO } }>;
+  return res.json() as Promise<{ paragraphs: ParagraphDTO[]; score?: { before: DiagnosticReportDTO; after: DiagnosticReportDTO } }>;
 }
 
 /** Score text for human-likeness via the local (no-model) backend endpoint. */

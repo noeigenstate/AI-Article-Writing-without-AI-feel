@@ -10,7 +10,7 @@ import {
   titleIndexOf,
   fullText,
 } from "../services/rewrite.js";
-import { scoreText } from "../services/aiScore.js";
+import { diagnoseText, scoreText } from "../services/aiScore.js";
 import { preservesProtectedFragments } from "../services/protect.js";
 import { saveDoc, getDoc, type DocRecord } from "../core/store.js";
 import { getBuiltinStyle } from "../data/styles.js";
@@ -106,12 +106,30 @@ function scoreParagraphs(paragraphs: { text: string }[], lang: Lang) {
   return scoreText(paragraphs.map((p) => p.text).join("\n"), lang);
 }
 
+function diagnoseParagraphs(paragraphs: { text: string }[], lang: Lang) {
+  return diagnoseText(paragraphs.map((p) => p.text).join("\n"), lang);
+}
+
 function scoreRewrittenParagraphs(
   paragraphs: RewrittenParagraph[],
   originalByIndex: Map<number, { index: number; kind: string; text: string }>,
   lang: Lang
 ) {
   return scoreText(
+    paragraphs
+      .filter((p) => originalByIndex.has(p.index))
+      .map((p) => p.rewritten)
+      .join("\n"),
+    lang
+  );
+}
+
+function diagnoseRewrittenParagraphs(
+  paragraphs: RewrittenParagraph[],
+  originalByIndex: Map<number, { index: number; kind: string; text: string }>,
+  lang: Lang
+) {
+  return diagnoseText(
     paragraphs
       .filter((p) => originalByIndex.has(p.index))
       .map((p) => p.rewritten)
@@ -216,7 +234,10 @@ router.post("/api/rewrite", async (req, res) => {
       after = guarded.score;
     }
 
-    res.json({ paragraphs, score: { before, after } });
+    const beforeDiagnosis = diagnoseParagraphs(rewriteTargets, lang);
+    const afterDiagnosis = diagnoseRewrittenParagraphs(paragraphs, targetByIndex, lang);
+
+    res.json({ paragraphs, score: { before: beforeDiagnosis, after: afterDiagnosis } });
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });
   }

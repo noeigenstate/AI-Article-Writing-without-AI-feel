@@ -133,6 +133,9 @@ export interface Dict {
   diagnosisExamples: string;
   diagnosisNoExamples: string;
   diagnosisLayer: (layer: string) => string;
+  remainingIssuesTitle: string;
+  remainingIssuesHint: string;
+  continuePolishHint: string;
   // store busy
   busyParsing: string;
   busyGenerating: string;
@@ -260,6 +263,9 @@ const en: Dict = {
       evidence: "Evidence",
       format: "Format",
     }[layer] ?? layer),
+  remainingIssuesTitle: "Remaining issues after rewrite",
+  remainingIssuesHint: "The rewrite improved the text, but these signals still remain.",
+  continuePolishHint: "You can polish the whole document again, or edit the listed paragraphs by hand.",
   busyParsing: "Parsing document, extracting style…",
   busyGenerating: "Writing the article…",
   busyMatching: "Matching domain and writing the article…",
@@ -416,6 +422,9 @@ const zh: Dict = {
       evidence: "证据",
       format: "格式",
     }[layer] ?? layer),
+  remainingIssuesTitle: "改写后的残留问题",
+  remainingIssuesHint: "文本已经完成一轮润色，但仍有这些 AI 味信号。",
+  continuePolishHint: "可以再次点击整篇润色，或按这些问题手动微调段落。",
   busyParsing: "解析文档、提取风格中…",
   busyGenerating: "正在生成文章…",
   busyMatching: "正在判断领域并生成文章…",
