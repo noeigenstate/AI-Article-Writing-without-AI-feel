@@ -5,6 +5,7 @@ import {
   type ResearchItemDTO,
   type TargetLength,
   type TopicOptionDTO,
+  type WritingSceneId,
 } from "../../lib/api.js";
 import { useStore } from "../../lib/store.js";
 import { Sparkle } from "../common/icons.js";
@@ -32,6 +33,7 @@ export default function ArticleGenerator() {
   const [customDomain, setCustomDomain] = useState("");
   const [titleInput, setTitleInput] = useState("");
   const [styleId, setStyleId] = useState("");
+  const [sceneId, setSceneId] = useState<WritingSceneId>("wechat");
   const [targetLength, setTargetLength] = useState<TargetLength>("medium");
   const [topics, setTopics] = useState<TopicOptionDTO[]>([]);
   const [topicBusy, setTopicBusy] = useState(false);
@@ -100,7 +102,7 @@ export default function ArticleGenerator() {
     setTopicError(null);
     setResearchError(null);
     try {
-      await doGenerateArticle(domainId, domainId === "custom" ? customDomain : "", topic, styleId, targetLength);
+      await doGenerateArticle(domainId, domainId === "custom" ? customDomain : "", topic, styleId, sceneId, targetLength);
     } finally {
       setGeneratingTopicId(null);
     }
@@ -116,7 +118,7 @@ export default function ArticleGenerator() {
     setTopicError(null);
     setResearchError(null);
     try {
-      await doGenerateArticleFromTitle(title, styleId, targetLength);
+      await doGenerateArticleFromTitle(title, styleId, sceneId, targetLength);
     } finally {
       setGeneratingTopicId(null);
     }
@@ -216,6 +218,18 @@ export default function ArticleGenerator() {
               </option>
             ))}
           </select>
+          <select
+            className="styleselect compact"
+            aria-label={t.sceneLabel}
+            value={sceneId}
+            onChange={(e) => setSceneId(e.target.value as WritingSceneId)}
+          >
+            {sceneOptions(t).map((scene) => (
+              <option key={scene.id} value={scene.id}>
+                {scene.label}
+              </option>
+            ))}
+          </select>
           <div className="segment">
             {LENGTHS.map((item) => (
               <button
@@ -293,4 +307,16 @@ export default function ArticleGenerator() {
       </section>
     </div>
   );
+}
+
+function sceneOptions(t: (typeof messages)["en"]): { id: WritingSceneId; label: string }[] {
+  return [
+    { id: "general", label: t.sceneGeneral },
+    { id: "wechat", label: t.sceneWechat },
+    { id: "business", label: t.sceneBusiness },
+    { id: "academic", label: t.sceneAcademic },
+    { id: "official", label: t.sceneOfficial },
+    { id: "social", label: t.sceneSocial },
+    { id: "technical", label: t.sceneTechnical },
+  ];
 }

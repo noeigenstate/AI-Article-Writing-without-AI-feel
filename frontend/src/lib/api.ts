@@ -76,6 +76,7 @@ export interface ResearchBundleDTO {
 }
 
 export type TargetLength = "short" | "medium" | "long";
+export type WritingSceneId = "general" | "wechat" | "business" | "academic" | "official" | "social" | "technical";
 
 export type ArticleRenderBlockDTO =
   | { type: "paragraph"; kind: string; text: string; paragraphIndex?: number }
@@ -143,13 +144,14 @@ export async function generateArticle(
   customDomain: string,
   topic: TopicOptionDTO,
   styleId: string,
+  sceneId: WritingSceneId,
   targetLength: TargetLength,
   lang: Lang = "en"
 ) {
   const res = await fetch(`${BASE}/article/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ domainId, customDomain, topic, styleId, targetLength, lang }),
+    body: JSON.stringify({ domainId, customDomain, topic, styleId, sceneId, targetLength, lang }),
   });
   if (!res.ok) throw await apiError(res, "Failed to generate article");
   return res.json() as Promise<GeneratedArticleResponseDTO>;
@@ -159,24 +161,26 @@ export async function generateArticle(
 export async function generateArticleFromTitle(
   title: string,
   styleId: string,
+  sceneId: WritingSceneId,
   targetLength: TargetLength,
   lang: Lang = "en"
 ) {
   const res = await fetch(`${BASE}/article/generate-from-title`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title, styleId, targetLength, lang }),
+    body: JSON.stringify({ title, styleId, sceneId, targetLength, lang }),
   });
   if (!res.ok) throw await apiError(res, "Failed to generate article from title");
   return res.json() as Promise<GeneratedArticleResponseDTO>;
 }
 
 /** Upload the target docx plus optional sample files; returns parsed structure. */
-export async function uploadFiles(target: File, references: File[], styleId = "", lang: Lang = "en") {
+export async function uploadFiles(target: File, references: File[], styleId = "", sceneId: WritingSceneId = "general", lang: Lang = "en") {
   const fd = new FormData();
   fd.append("file", target);
   references.forEach((r) => fd.append("references", r));
   if (styleId) fd.append("styleId", styleId);
+  fd.append("sceneId", sceneId);
   fd.append("lang", lang);
   const res = await fetch(`${BASE}/upload`, { method: "POST", body: fd });
   if (!res.ok) throw await apiError(res, "Upload failed");

@@ -51,6 +51,14 @@ export interface Dict {
   chooseStyleTitle: string;
   styleHint: string;
   styleNone: string;
+  sceneLabel: string;
+  sceneGeneral: string;
+  sceneWechat: string;
+  sceneBusiness: string;
+  sceneAcademic: string;
+  sceneOfficial: string;
+  sceneSocial: string;
+  sceneTechnical: string;
   uploadSamples: string;
   selectedSamples: (n: number) => string;
   noSamples: string;
@@ -166,6 +174,14 @@ const en: Dict = {
   chooseStyleTitle: "Choose a rewrite style",
   styleHint: "Use a built-in style, or upload your own samples, or stack both.",
   styleNone: "None (de-AI only) / use samples below",
+  sceneLabel: "Writing scene",
+  sceneGeneral: "General",
+  sceneWechat: "Newsletter",
+  sceneBusiness: "Business",
+  sceneAcademic: "Academic / report",
+  sceneOfficial: "Formal notice",
+  sceneSocial: "Social post",
+  sceneTechnical: "Technical docs",
   uploadSamples: "Upload samples",
   selectedSamples: (n) => `${n} sample${n > 1 ? "s" : ""} selected`,
   noSamples: "None chosen (optional, .docx / .txt)",
@@ -314,6 +330,14 @@ const zh: Dict = {
   chooseStyleTitle: "选择改写风格",
   styleHint: "用内置「我的风格」，或上传范文，或两者叠加。",
   styleNone: "不指定（仅去 AI 味）/ 用下方范文",
+  sceneLabel: "文体场景",
+  sceneGeneral: "通用",
+  sceneWechat: "公众号",
+  sceneBusiness: "商务沟通",
+  sceneAcademic: "学术/报告",
+  sceneOfficial: "公文/正式说明",
+  sceneSocial: "社媒短文",
+  sceneTechnical: "技术文档",
   uploadSamples: "上传范文",
   selectedSamples: (n) => `已选 ${n} 篇范文`,
   noSamples: "未选择（可选，.docx / .txt）",

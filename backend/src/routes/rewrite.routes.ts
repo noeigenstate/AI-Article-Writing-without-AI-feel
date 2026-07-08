@@ -13,6 +13,7 @@ import {
 import { scoreText } from "../services/aiScore.js";
 import { saveDoc, getDoc, type DocRecord } from "../core/store.js";
 import { getBuiltinStyle } from "../data/styles.js";
+import { writingSceneProfile } from "../data/writingScenes.js";
 import { normalizeLang, SERVER_MESSAGES, tr } from "../core/i18n.js";
 import type { Lang } from "../core/i18n.js";
 
@@ -125,6 +126,7 @@ router.post(
 
       // 风格来源：内置 skill（styleId）+/或 上传范文
       const styleId = (req.body?.styleId as string) || "";
+      const sceneId = (req.body?.sceneId as string) || "general";
       const builtin = styleId ? getBuiltinStyle(styleId, lang) : undefined;
 
       let sampleText = "";
@@ -141,7 +143,8 @@ router.post(
         : "";
 
       const sampleLabel = lang === "zh" ? "补充范文风格：" : "Extra style from samples:";
-      const styleSummary = [builtin?.profile, extracted && `${sampleLabel}\n${extracted}`]
+      const sceneProfile = writingSceneProfile(sceneId, lang);
+      const styleSummary = [sceneProfile, builtin?.profile, extracted && `${sampleLabel}\n${extracted}`]
         .filter(Boolean)
         .join("\n\n");
 

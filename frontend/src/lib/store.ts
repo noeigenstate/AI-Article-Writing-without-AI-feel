@@ -18,6 +18,7 @@ import {
   type StyleDTO,
   type TargetLength,
   type TopicOptionDTO,
+  type WritingSceneId,
 } from "./api.js";
 import { getStoredLang, storeLang, messages, type Lang } from "./i18n.js";
 import type { ProgressTask } from "./progress.js";
@@ -69,15 +70,16 @@ interface State {
   setResearch: (research: ResearchBundleDTO | null, mode?: Mode) => void;
   loadStyles: () => Promise<void>;
   loadArticleDomains: () => Promise<void>;
-  doUpload: (target: File, refs: File[], styleId: string) => Promise<void>;
+  doUpload: (target: File, refs: File[], styleId: string, sceneId: WritingSceneId) => Promise<void>;
   doGenerateArticle: (
     domainId: string,
     customDomain: string,
     topic: TopicOptionDTO,
     styleId: string,
+    sceneId: WritingSceneId,
     targetLength: TargetLength
   ) => Promise<void>;
-  doGenerateArticleFromTitle: (title: string, styleId: string, targetLength: TargetLength) => Promise<void>;
+  doGenerateArticleFromTitle: (title: string, styleId: string, sceneId: WritingSceneId, targetLength: TargetLength) => Promise<void>;
   doRewrite: () => Promise<void>;
   setSentence: (paraIndex: number, sentenceIdx: number, text: string) => void;
   setParagraph: (paraIndex: number, text: string) => void;
@@ -211,11 +213,11 @@ export const useStore = create<State>((set, get) => ({
     set({ articleDomains: await fetchArticleDomains(get().lang) });
   },
 
-  async doUpload(target, refs, styleId) {
+  async doUpload(target, refs, styleId, sceneId) {
     const mode = get().mode;
     set((s) => workspacePatch(s, mode, { busy: messages[get().lang].busyParsing, error: null }));
     try {
-      const r = await uploadFiles(target, refs, styleId, get().lang);
+      const r = await uploadFiles(target, refs, styleId, sceneId, get().lang);
       set((s) => workspacePatch(s, mode, {
         docId: r.docId,
         styleSummary: r.styleSummary,
@@ -236,11 +238,11 @@ export const useStore = create<State>((set, get) => ({
     }
   },
 
-  async doGenerateArticle(domainId, customDomain, topic, styleId, targetLength) {
+  async doGenerateArticle(domainId, customDomain, topic, styleId, sceneId, targetLength) {
     const mode = get().mode;
     set((s) => workspacePatch(s, mode, { busy: messages[get().lang].busyGenerating, progress: startProgress("article"), error: null }));
     try {
-      const r = await generateArticle(domainId, customDomain, topic, styleId, targetLength, get().lang);
+      const r = await generateArticle(domainId, customDomain, topic, styleId, sceneId, targetLength, get().lang);
       set((s) => workspacePatch(s, mode, {
         docId: r.docId,
         styleSummary: r.styleSummary,
@@ -261,11 +263,11 @@ export const useStore = create<State>((set, get) => ({
     }
   },
 
-  async doGenerateArticleFromTitle(title, styleId, targetLength) {
+  async doGenerateArticleFromTitle(title, styleId, sceneId, targetLength) {
     const mode = get().mode;
     set((s) => workspacePatch(s, mode, { busy: messages[get().lang].busyMatching, progress: startProgress("articleFromTitle"), error: null }));
     try {
-      const r = await generateArticleFromTitle(title, styleId, targetLength, get().lang);
+      const r = await generateArticleFromTitle(title, styleId, sceneId, targetLength, get().lang);
       set((s) => workspacePatch(s, mode, {
         docId: r.docId,
         styleSummary: r.styleSummary,

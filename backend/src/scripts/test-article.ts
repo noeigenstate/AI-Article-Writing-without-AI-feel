@@ -12,6 +12,7 @@ import {
   matchArticleDomainFromTitle,
 } from "../services/article.js";
 import { articleDraftPrompt } from "../prompts/article.prompts.js";
+import { writingSceneProfile } from "../data/writingScenes.js";
 
 const docx = await createDocxFromParagraphs([
   { kind: "heading1", text: "这是一篇公众号文章标题" },
@@ -39,6 +40,8 @@ const lengthPromptBase = {
 assert.ok(articleDraftPrompt({ ...lengthPromptBase, targetLength: "short" }).includes("约 500 字"));
 assert.ok(articleDraftPrompt({ ...lengthPromptBase, targetLength: "medium" }).includes("不少于 1000 字"));
 assert.ok(articleDraftPrompt({ ...lengthPromptBase, targetLength: "long" }).includes("3000 字以上"));
+assert.ok(writingSceneProfile("wechat", "zh").includes("公众号"));
+assert.ok(writingSceneProfile("technical", "en").includes("technical docs"));
 
 let topicPrompt = "";
 const topicResearchTitle = "Useful AI Agents for Small Teams";
