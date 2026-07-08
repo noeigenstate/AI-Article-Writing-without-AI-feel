@@ -118,6 +118,13 @@ export interface Dict {
   scoreRemoved: (n: number) => string;
   scoreClean: string;
   rescore: string;
+  diagnose: string;
+  diagnosisTitle: string;
+  diagnosisSummary: string;
+  diagnosisSuggestion: string;
+  diagnosisExamples: string;
+  diagnosisNoExamples: string;
+  diagnosisLayer: (layer: string) => string;
   // store busy
   busyParsing: string;
   busyGenerating: string;
@@ -222,6 +229,21 @@ const en: Dict = {
   scoreRemoved: (n) => `${n} removed`,
   scoreClean: "No obvious AI tells deducted.",
   rescore: "Re-score",
+  diagnose: "Diagnose AI tells",
+  diagnosisTitle: "Diagnosis report",
+  diagnosisSummary: "Summary",
+  diagnosisSuggestion: "Suggestion",
+  diagnosisExamples: "Evidence",
+  diagnosisNoExamples: "No direct phrase evidence; this is a whole-text signal.",
+  diagnosisLayer: (layer) =>
+    ({
+      wording: "Wording",
+      sentence: "Sentence",
+      structure: "Structure",
+      rhythm: "Rhythm",
+      evidence: "Evidence",
+      format: "Format",
+    }[layer] ?? layer),
   busyParsing: "Parsing document, extracting style…",
   busyGenerating: "Writing the article…",
   busyMatching: "Matching domain and writing the article…",
@@ -355,6 +377,21 @@ const zh: Dict = {
   scoreRemoved: (n) => `消除 ${n} 处`,
   scoreClean: "未发现明显 AI 痕迹扣分。",
   rescore: "重新评分",
+  diagnose: "诊断 AI 味",
+  diagnosisTitle: "诊断报告",
+  diagnosisSummary: "概览",
+  diagnosisSuggestion: "建议",
+  diagnosisExamples: "证据",
+  diagnosisNoExamples: "这类是全文信号，没有直接短语证据。",
+  diagnosisLayer: (layer) =>
+    ({
+      wording: "用词",
+      sentence: "句式",
+      structure: "结构",
+      rhythm: "节奏",
+      evidence: "证据",
+      format: "格式",
+    }[layer] ?? layer),
   busyParsing: "解析文档、提取风格中…",
   busyGenerating: "正在生成文章…",
   busyMatching: "正在判断领域并生成文章…",

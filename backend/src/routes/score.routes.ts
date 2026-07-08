@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { scoreText } from "../services/aiScore.js";
+import { diagnoseText, scoreText } from "../services/aiScore.js";
 import { normalizeLang } from "../core/i18n.js";
 
 /** Routes for the local human-likeness score. */
@@ -13,6 +13,16 @@ const router = Router();
 router.post("/api/score", (req, res) => {
   const { text, lang: rawLang } = req.body as { text?: string; lang?: string };
   res.json(scoreText(text ?? "", normalizeLang(rawLang)));
+});
+
+/**
+ * `POST /api/diagnose` — return a local, explainable AI-smell report.
+ *
+ * Body: `{ text, lang }`. Does not rewrite content and does not call a model.
+ */
+router.post("/api/diagnose", (req, res) => {
+  const { text, lang: rawLang } = req.body as { text?: string; lang?: string };
+  res.json(diagnoseText(text ?? "", normalizeLang(rawLang)));
 });
 
 export default router;

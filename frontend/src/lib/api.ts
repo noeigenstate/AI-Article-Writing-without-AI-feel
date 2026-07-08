@@ -192,7 +192,32 @@ export async function uploadFiles(target: File, references: File[], styleId = ""
 export interface AiScoreDTO {
   score: number;
   level: "low" | "medium" | "high";
-  signals: { id: string; label: string; hits: number; points: number }[];
+  signals: ScoreSignalDTO[];
+}
+
+export type ScoreLayerDTO = "wording" | "sentence" | "structure" | "rhythm" | "evidence" | "format";
+
+export interface ScoreSignalDTO {
+  id: string;
+  label: string;
+  hits: number;
+  points: number;
+  layer?: ScoreLayerDTO;
+  suggestion?: string;
+  examples?: { text: string; start: number; end: number }[];
+}
+
+export interface DiagnosticReportDTO extends AiScoreDTO {
+  summary: string;
+  issues: {
+    id: string;
+    layer: ScoreLayerDTO;
+    label: string;
+    hits: number;
+    points: number;
+    suggestion: string;
+    examples: { text: string; start: number; end: number }[];
+  }[];
 }
 
 /** De-AI the whole document; returns paragraphs and before/after scores. */
@@ -215,6 +240,17 @@ export async function scoreText(text: string, lang: Lang = "en") {
   });
   if (!res.ok) throw await apiError(res, "Score failed");
   return res.json() as Promise<AiScoreDTO>;
+}
+
+/** Return an explainable local diagnosis without rewriting the document. */
+export async function diagnoseText(text: string, lang: Lang = "en") {
+  const res = await fetch(`${BASE}/diagnose`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, lang }),
+  });
+  if (!res.ok) throw await apiError(res, "Diagnosis failed");
+  return res.json() as Promise<DiagnosticReportDTO>;
 }
 
 /** Fetch N title candidates for a document (empty array on failure). */

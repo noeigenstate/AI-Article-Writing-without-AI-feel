@@ -698,6 +698,85 @@ button.link:hover {
   font-size: 13.5px;
 }
 
+.diagnosis-report {
+  margin-top: 12px;
+  display: grid;
+  gap: 12px;
+}
+
+.diagnosis-summary {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: #faf9ff;
+}
+
+.diagnosis-summary strong,
+.diagnosis-item-head strong {
+  color: var(--ink-strong);
+}
+
+.diagnosis-summary p,
+.diagnosis-item p {
+  margin: 6px 0 0;
+  color: var(--ink);
+  font-size: 13.5px;
+  line-height: 1.65;
+}
+
+.diagnosis-list {
+  display: grid;
+  gap: 10px;
+}
+
+.diagnosis-item {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--panel);
+}
+
+.diagnosis-item-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+
+.diagnosis-item-head span {
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  color: var(--accent-dark);
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+
+.diagnosis-item-head small {
+  margin-left: auto;
+  color: var(--bad);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.diagnosis-examples {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.diagnosis-examples code {
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: #f4f1ff;
+  color: var(--ink-strong);
+  font-family: inherit;
+}
+
 .score-foot {
   margin: 12px 0 0;
   color: var(--muted);

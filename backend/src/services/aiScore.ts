@@ -15,6 +15,9 @@ export interface ScoreSignal {
   label: string;
   hits: number;
   points: number; // 该类贡献的扣分（已封顶）
+  layer?: SignalLayer;
+  suggestion?: string;
+  examples?: SignalExample[];
 }
 
 export interface AiScore {
@@ -23,9 +26,34 @@ export interface AiScore {
   signals: ScoreSignal[]; // 仅返回命中的项，按扣分降序
 }
 
+export type SignalLayer = "wording" | "sentence" | "structure" | "rhythm" | "evidence" | "format";
+
+export interface SignalExample {
+  text: string;
+  start: number;
+  end: number;
+}
+
+export interface DiagnosticIssue {
+  id: string;
+  layer: SignalLayer;
+  label: string;
+  hits: number;
+  points: number;
+  suggestion: string;
+  examples: SignalExample[];
+}
+
+export interface AiDiagnosticReport extends AiScore {
+  summary: string;
+  issues: DiagnosticIssue[];
+}
+
 interface PhraseGroup {
   id: string;
   label: string;
+  layer: SignalLayer;
+  suggestion: string;
   phrases: string[]; // 直接子串匹配（中文）或单词匹配（英文）
   atSentenceStart?: boolean; // 仅统计句首命中
   scale: number; // 密度 → 分数的放大系数
@@ -35,6 +63,8 @@ interface PhraseGroup {
 interface RegexGroup {
   id: string;
   label: string;
+  layer: SignalLayer;
+  suggestion: string;
   patterns: RegExp[];
   scale: number;
   max: number;
@@ -44,6 +74,8 @@ const ZH_PHRASES: PhraseGroup[] = [
   {
     id: "opener",
     label: "套话开头/收尾",
+    layer: "structure",
+    suggestion: "删掉宏大开场或万能总结，直接写具体事件、对象、判断或下一步。",
     phrases: ["综上所述", "总而言之", "总的来说", "总之", "一言以蔽之", "由此可见", "在当今", "当今社会", "在这个", "归根结底"],
     scale: 60,
     max: 26,
@@ -51,6 +83,8 @@ const ZH_PHRASES: PhraseGroup[] = [
   {
     id: "filler",
     label: "正确的废话/空泛评注",
+    layer: "wording",
+    suggestion: "把空泛判断换成可验证的信息：谁、何时、做了什么、造成什么结果。",
     phrases: ["值得注意的是", "值得一提的是", "不难发现", "不难看出", "显而易见", "毫无疑问", "众所周知", "不可忽视", "正因如此", "重要的是"],
     scale: 60,
     max: 22,
@@ -58,6 +92,8 @@ const ZH_PHRASES: PhraseGroup[] = [
   {
     id: "buzz",
     label: "营销黑话",
+    layer: "wording",
+    suggestion: "把黑话换成普通动词和具体动作，说明到底省了什么、增加了什么、谁受影响。",
     phrases: [
       "赋能",
       "新范式",
@@ -84,6 +120,8 @@ const ZH_PHRASES: PhraseGroup[] = [
   {
     id: "model-catchphrase",
     label: "模型腔口头禅",
+    layer: "wording",
+    suggestion: "减少网感套话和情绪化万能词，改成符合作者身份的自然表达。",
     phrases: [
       "稳稳拖住",
       "先接住",
@@ -113,6 +151,8 @@ const ZH_PHRASES: PhraseGroup[] = [
   {
     id: "connective",
     label: "机械连接词起头",
+    layer: "sentence",
+    suggestion: "少用“首先/其次/此外”排队，改用真实因果、转折或直接承接上一句。",
     phrases: ["此外", "然而", "因此", "首先", "其次", "再者", "最后", "与此同时", "另一方面", "综上"],
     atSentenceStart: true,
     scale: 45,
@@ -121,6 +161,8 @@ const ZH_PHRASES: PhraseGroup[] = [
   {
     id: "frame",
     label: "泛化套路句式",
+    layer: "sentence",
+    suggestion: "把“关键在于/我们需要”这类句壳拆开，换成一个明确动作或判断。",
     phrases: ["是一种", "关键在于", "重点在于", "核心在于", "我们可以", "我们需要", "这种现象", "这一", "对于"],
     scale: 30,
     max: 14,
@@ -131,6 +173,8 @@ const EN_PHRASES: PhraseGroup[] = [
   {
     id: "opener",
     label: "Boilerplate opener/closer",
+    layer: "structure",
+    suggestion: "Remove broad openings or generic closings; start with the specific claim, actor, or event.",
     phrases: ["in conclusion", "in today's", "in the modern world", "in summary", "to sum up", "all in all", "at the end of the day", "in this day and age"],
     scale: 70,
     max: 26,
@@ -138,6 +182,8 @@ const EN_PHRASES: PhraseGroup[] = [
   {
     id: "filler",
     label: "Empty filler / hedging",
+    layer: "wording",
+    suggestion: "Replace filler with concrete evidence, a direct claim, or a measurable consequence.",
     phrases: ["it is worth noting", "it is important to note", "needless to say", "it goes without saying", "it cannot be denied", "undoubtedly", "without a doubt"],
     scale: 70,
     max: 22,
@@ -145,6 +191,8 @@ const EN_PHRASES: PhraseGroup[] = [
   {
     id: "buzz",
     label: "AI buzzwords",
+    layer: "wording",
+    suggestion: "Swap buzzwords for plain verbs and specific details about what changed and for whom.",
     phrases: [
       "leverage",
       "empower",
@@ -174,6 +222,8 @@ const EN_PHRASES: PhraseGroup[] = [
   {
     id: "connective",
     label: "Mechanical sentence-start connective",
+    layer: "sentence",
+    suggestion: "Vary transitions and let the logic of the previous sentence carry the next one.",
     phrases: ["moreover", "furthermore", "however", "therefore", "additionally", "firstly", "secondly", "finally", "in addition", "consequently"],
     atSentenceStart: true,
     scale: 50,
@@ -182,6 +232,8 @@ const EN_PHRASES: PhraseGroup[] = [
   {
     id: "frame",
     label: "Generic frame",
+    layer: "sentence",
+    suggestion: "Replace generic framing with a precise claim, example, or decision.",
     phrases: ["is a kind of", "the key is", "plays a crucial role", "plays a vital role", "when it comes to", "a wide range of"],
     scale: 35,
     max: 14,
@@ -191,6 +243,8 @@ const EN_PHRASES: PhraseGroup[] = [
 const PARALLEL_ZH: RegexGroup = {
   id: "parallel",
   label: "排比/对仗堆砌",
+  layer: "structure",
+  suggestion: "拆掉整齐排比，保留最有信息量的一组，并补一个真实例子或限制条件。",
   patterns: [
     /不仅[^。！？\n]{0,40}(而且|还|也|更)/g,
     /既[^。！？\n]{0,30}又/g,
@@ -204,6 +258,8 @@ const PARALLEL_ZH: RegexGroup = {
 const PARALLEL_EN: RegexGroup = {
   id: "parallel",
   label: "Piled-up parallelism",
+  layer: "structure",
+  suggestion: "Break stacked parallel phrasing into one direct claim plus a concrete example or caveat.",
   patterns: [/not only\b[^.!?\n]{0,60}\bbut also/gi, /\bboth\b[^.!?\n]{0,40}\band\b/gi],
   scale: 55,
   max: 14,
@@ -213,6 +269,8 @@ const PARALLEL_EN: RegexGroup = {
 const MARKDOWN: RegexGroup = {
   id: "markdown",
   label: "Markdown 残留 / leaked Markdown",
+  layer: "format",
+  suggestion: "清理 Markdown 标记，改成适合 Word/公众号正文的自然排版。",
   patterns: [/^#{1,6}\s/gm, /\*\*[^*\n]+\*\*/g, /^\s*[-*]\s+/gm, /^\s*>\s/gm, /`[^`\n]+`/g],
   scale: 40,
   max: 20,
@@ -309,6 +367,14 @@ function rangesOverlap(a: TextRange, b: TextRange): boolean {
   return a.start < b.end && b.start < a.end;
 }
 
+function examplesForRanges(text: string, ranges: TextRange[], limit = 3): SignalExample[] {
+  return ranges.slice(0, limit).map((range) => ({
+    text: text.slice(range.start, range.end),
+    start: range.start,
+    end: range.end,
+  }));
+}
+
 /**
  * Score one phrase group as length-normalized, capped points.
  *
@@ -332,7 +398,15 @@ function phraseGroupScore(group: PhraseGroup, text: string, units: number, claim
   const hits = accepted.length;
   const density = hits / units;
   const points = Math.min(group.max, density * group.scale);
-  return { id: group.id, label: group.label, hits, points };
+  return {
+    id: group.id,
+    label: group.label,
+    layer: group.layer,
+    suggestion: group.suggestion,
+    examples: examplesForRanges(text, accepted),
+    hits,
+    points,
+  };
 }
 
 /**
@@ -345,10 +419,25 @@ function phraseGroupScore(group: PhraseGroup, text: string, units: number, claim
  */
 function regexGroupScore(group: RegexGroup, text: string, units: number): ScoreSignal {
   let hits = 0;
-  for (const re of group.patterns) hits += (text.match(re) ?? []).length;
+  const ranges: TextRange[] = [];
+  for (const re of group.patterns) {
+    for (const match of text.matchAll(re)) {
+      hits += 1;
+      const start = match.index ?? 0;
+      ranges.push({ start, end: start + match[0].length });
+    }
+  }
   const density = hits / units;
   const points = Math.min(group.max, density * group.scale);
-  return { id: group.id, label: group.label, hits, points };
+  return {
+    id: group.id,
+    label: group.label,
+    layer: group.layer,
+    suggestion: group.suggestion,
+    examples: examplesForRanges(text, ranges),
+    hits,
+    points,
+  };
 }
 
 function repetitionSignal(text: string, lang: Lang, units: number): ScoreSignal {
@@ -377,13 +466,37 @@ function repetitionSignal(text: string, lang: Lang, units: number): ScoreSignal 
       ? Array.from(text.matchAll(/[\u4e00-\u9fff]{2,4}/g), (m) => m[0])
       : (text.toLowerCase().match(/[a-z][a-z-]{3,}/g) ?? []);
   const counts = new Map<string, number>();
+  const rangesByToken = new Map<string, TextRange[]>();
   for (const token of tokens) {
     if (stop.has(token)) continue;
     counts.set(token, (counts.get(token) ?? 0) + 1);
   }
+  for (const token of counts.keys()) {
+    const ranges: TextRange[] = [];
+    let offset = 0;
+    while (offset < text.length) {
+      const start = text.indexOf(token, offset);
+      if (start < 0) break;
+      ranges.push({ start, end: start + token.length });
+      offset = start + token.length;
+    }
+    rangesByToken.set(token, ranges);
+  }
   const repeated = [...counts.values()].reduce((sum, count) => sum + Math.max(0, count - 2), 0);
   const points = Math.min(10, (repeated / units) * 3.5);
-  return { id: "repetition", label: lang === "zh" ? "词语重复偏多" : "Repeated wording", hits: repeated, points };
+  const exampleRanges = [...counts.entries()]
+    .filter(([, count]) => count > 2)
+    .sort((a, b) => b[1] - a[1])
+    .flatMap(([token]) => rangesByToken.get(token) ?? []);
+  return {
+    id: "repetition",
+    label: lang === "zh" ? "词语重复偏多" : "Repeated wording",
+    layer: "rhythm",
+    suggestion: lang === "zh" ? "合并重复词，换成更具体的名词或删掉无信息重复。" : "Merge repeated wording or replace it with more specific nouns and verbs.",
+    examples: examplesForRanges(text, exampleRanges),
+    hits: repeated,
+    points,
+  };
 }
 
 function concretenessSignal(text: string, lang: Lang, units: number): ScoreSignal {
@@ -394,7 +507,15 @@ function concretenessSignal(text: string, lang: Lang, units: number): ScoreSigna
     (lang === "en" ? (text.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\b/g) ?? []).length : 0);
   const density = anchors / units;
   const points = Math.min(8, Math.max(0, (0.45 - density) / 0.45) * 8);
-  return { id: "concreteness", label: lang === "zh" ? "具体锚点不足" : "Few concrete anchors", hits: anchors, points };
+  return {
+    id: "concreteness",
+    label: lang === "zh" ? "具体锚点不足" : "Few concrete anchors",
+    layer: "evidence",
+    suggestion: lang === "zh" ? "补充数字、时间、人物、来源、案例或引用，让判断有落点。" : "Add numbers, dates, names, sources, examples, or citations so claims have anchors.",
+    examples: [],
+    hits: anchors,
+    points,
+  };
 }
 
 /**
@@ -408,13 +529,18 @@ function uniformitySignal(sentences: string[], lang: Lang): ScoreSignal {
   const lens = sentences
     .map((s) => (lang === "zh" ? Array.from(s).length : s.split(/\s+/).filter(Boolean).length))
     .filter((n) => n > 1);
-  if (lens.length < 5) return { id: "uniformity", label: "句长单一", hits: 0, points: 0 };
+  const label = lang === "zh" ? "句长过于均匀" : "Uniform sentence length";
+  const suggestion =
+    lang === "zh"
+      ? "打破整齐句长：短句下判断，长句交代条件、例子或反例。"
+      : "Vary sentence length: use short sentences for judgment and longer ones for context or caveats.";
+  if (lens.length < 5) return { id: "uniformity", label, layer: "rhythm", suggestion, examples: [], hits: 0, points: 0 };
   const mean = lens.reduce((a, b) => a + b, 0) / lens.length;
   const variance = lens.reduce((a, b) => a + (b - mean) ** 2, 0) / lens.length;
   const cv = Math.sqrt(variance) / (mean || 1); // 变异系数
   // CV 越低越均匀越像 AI。0.25 以下满扣，0.55 以上不扣。
   const norm = Math.max(0, Math.min(1, (0.55 - cv) / 0.3));
-  return { id: "uniformity", label: lang === "zh" ? "句长过于均匀" : "Uniform sentence length", hits: 0, points: norm * 12 };
+  return { id: "uniformity", label, layer: "rhythm", suggestion, examples: [], hits: 0, points: norm * 12 };
 }
 
 /**
@@ -430,6 +556,32 @@ function uniformitySignal(sentences: string[], lang: Lang): ScoreSignal {
  * @returns The score, a coarse level, and the hit breakdown (descending).
  */
 export function scoreText(text: string, lang: Lang): AiScore {
+  const evaluated = evaluateSignals(text, lang);
+  return { score: evaluated.score, level: evaluated.level, signals: evaluated.signals };
+}
+
+export function diagnoseText(text: string, lang: Lang): AiDiagnosticReport {
+  const evaluated = evaluateSignals(text, lang);
+  const issues = evaluated.signals.map((signal): DiagnosticIssue => ({
+    id: signal.id,
+    layer: signal.layer ?? "wording",
+    label: signal.label,
+    hits: signal.hits,
+    points: signal.points,
+    suggestion: signal.suggestion ?? defaultSuggestion(lang),
+    examples: signal.examples ?? [],
+  }));
+
+  return {
+    score: evaluated.score,
+    level: evaluated.level,
+    signals: evaluated.signals,
+    summary: diagnosticSummary(evaluated.score, issues, lang),
+    issues,
+  };
+}
+
+function evaluateSignals(text: string, lang: Lang): AiScore {
   const clean = (text ?? "").trim();
   const sentences = splitForScoring(clean);
   const len = lang === "zh" ? Array.from(clean).length : clean.split(/\s+/).filter(Boolean).length;
@@ -461,4 +613,19 @@ export function scoreText(text: string, lang: Lang): AiScore {
     .map((s) => ({ ...s, points: Math.round(s.points) }));
 
   return { score, level, signals: shown };
+}
+
+function diagnosticSummary(score: number, issues: DiagnosticIssue[], lang: Lang): string {
+  if (issues.length === 0) {
+    return lang === "zh" ? "暂未发现明显 AI 味，文本已经比较自然。" : "No obvious AI-writing tells were found.";
+  }
+  const top = issues.slice(0, 3).map((issue) => issue.label).join(lang === "zh" ? "、" : ", ");
+  if (lang === "zh") {
+    return `当前人类感 ${score}/100，主要问题集中在：${top}。建议先处理扣分最高的几类。`;
+  }
+  return `Current human-likeness score is ${score}/100. Main issues: ${top}. Start with the highest-impact fixes.`;
+}
+
+function defaultSuggestion(lang: Lang): string {
+  return lang === "zh" ? "删掉模板感表达，换成具体信息和自然语序。" : "Remove templated phrasing and replace it with concrete details.";
 }
