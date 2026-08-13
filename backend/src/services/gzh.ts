@@ -816,7 +816,7 @@ export async function formatGzhArticle(input: GzhFormatInput): Promise<GzhFormat
   const rendered: string[] = [];
   for (const chunk of chunks) {
     let html = sanitizeChunkHtml(
-      await chat(buildChunkPrompt(doc, chunk, author), { system, temperature: 0.4, maxTokens: 7000 })
+      await chat(buildChunkPrompt(doc, chunk, author), { system, temperature: 0.4 })
     );
     if (!html) throw new Error(input.lang === "zh" ? "模型返回为空，请重试" : "Model returned empty output; try again.");
     const check = validateGzhHtml(html);
@@ -829,7 +829,7 @@ export async function formatGzhArticle(input: GzhFormatInput): Promise<GzhFormat
             "",
             html,
           ].join("\n"),
-          { system, temperature: 0.2, maxTokens: 7000 }
+          { system, temperature: 0.2 }
         )
       );
       if (fixed && validateGzhHtml(fixed).errors.length <= check.errors.length) html = fixed;

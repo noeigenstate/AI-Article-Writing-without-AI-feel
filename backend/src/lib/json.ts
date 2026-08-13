@@ -6,7 +6,10 @@
  */
 
 /** Minimal chat signature so this module need not depend on the LLM service. */
-export type AskFn = (prompt: string, opts?: { temperature?: number }) => Promise<string>;
+export type AskFn = (
+  prompt: string,
+  opts?: { temperature?: number; disableThinking?: boolean }
+) => Promise<string>;
 
 /**
  * Parse JSON that may be wrapped in code fences or padded with surrounding text.
@@ -42,7 +45,10 @@ export async function parseJsonWithRepair<T>(raw: string, ask: AskFn, expected: 
   try {
     return parseJson<T>(raw);
   } catch {
-    const repaired = await ask(jsonRepairPrompt(raw, expected), { temperature: 0 });
+    const repaired = await ask(jsonRepairPrompt(raw, expected), {
+      temperature: 0,
+      disableThinking: true,
+    });
     try {
       return parseJson<T>(repaired);
     } catch {

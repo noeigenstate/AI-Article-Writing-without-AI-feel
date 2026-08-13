@@ -7,8 +7,8 @@ import {
   articleToRenderBlocks,
   enrichArticleWithResearch,
   generateArticleDraft,
-  ArticleCitationTargetError,
   ArticleLengthTargetError,
+  ArticleModelOutputError,
   generateTopicOptions,
   matchArticleDomainFromTitle,
   resolveArticleDomain,
@@ -99,6 +99,9 @@ router.post("/api/article/generate", async (req, res) => {
       return res.status(400).json({ error: tr(SERVER_MESSAGES.invalidTargetLength, lang) });
     }
     if (!topic) return res.status(400).json({ error: tr(SERVER_MESSAGES.missingTopic, lang) });
+    if (!isArticleTopic(topic)) {
+      return res.status(400).json({ error: tr(SERVER_MESSAGES.invalidTopic, lang) });
+    }
 
     const domain = resolveArticleDomain(domainId, customDomain, lang);
     res.json(await generateArticlePayload({ domain, topic, styleId, sceneId, targetLength, lang }));
@@ -107,8 +110,8 @@ router.post("/api/article/generate", async (req, res) => {
       res.status(422).json({ error: e.message, length: e.length });
       return;
     }
-    if (e instanceof ArticleCitationTargetError) {
-      res.status(422).json({ error: e.message });
+    if (e instanceof ArticleModelOutputError) {
+      res.status(422).json({ error: tr(SERVER_MESSAGES.invalidArticleOutput, normalizeLang(req.body?.lang)) });
       return;
     }
     res.status(500).json({ error: (e as Error).message });
@@ -157,8 +160,8 @@ router.post("/api/article/generate-from-title", async (req, res) => {
       res.status(422).json({ error: e.message, length: e.length });
       return;
     }
-    if (e instanceof ArticleCitationTargetError) {
-      res.status(422).json({ error: e.message });
+    if (e instanceof ArticleModelOutputError) {
+      res.status(422).json({ error: tr(SERVER_MESSAGES.invalidArticleOutput, normalizeLang(req.body?.lang)) });
       return;
     }
     res.status(500).json({ error: (e as Error).message });
@@ -229,6 +232,14 @@ async function generateArticlePayload(input: {
       sentences: splitSentences(p.text),
     })),
   };
+}
+
+/** Accept a non-empty title string or a generated topic object with a title. */
+function isArticleTopic(value: unknown): value is TopicOption | string {
+  if (typeof value === "string") return value.trim().length > 0;
+  if (!value || typeof value !== "object") return false;
+  return typeof (value as { title?: unknown }).title === "string"
+    && Boolean((value as { title: string }).title.trim());
 }
 
 export default router;

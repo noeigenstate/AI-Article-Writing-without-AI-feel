@@ -11,6 +11,7 @@ import {
   articleToDocParagraphs,
   articleToRenderBlocks,
   enrichArticleWithResearch,
+  ArticleModelOutputError,
   generateArticleDraft,
   generateTopicOptions,
   matchArticleDomainFromTitle,
@@ -123,6 +124,13 @@ try {
     assert.equal(response.status, 400);
     assert.match(String((await response.json() as { error?: unknown }).error), /targetLength/);
   }
+  const malformedTopic = await fetch(`http://127.0.0.1:${port}/api/article/generate`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ topic: {}, lang: "zh" }),
+  });
+  assert.equal(malformedTopic.status, 400);
+  assert.match(String((await malformedTopic.json() as { error?: unknown }).error), /选题格式无效/);
 } finally {
   server.close();
   await once(server, "close");
@@ -153,8 +161,9 @@ const topics = await generateTopicOptions(
     n: 2,
     researchContext: `来源：arXiv\n${topicResearchTitle}`,
   },
-  async (prompt) => {
+  async (prompt, opts) => {
     topicPrompt = prompt;
+    assert.equal(opts?.disableThinking, true);
     return JSON.stringify([
       {
         title: "AI 应用开始进入小团队",
@@ -211,8 +220,9 @@ assert.equal(topicRepairCalls, 2);
 assert.equal(repairedTopics.length, 1);
 assert.equal(repairedTopics[0].title, "修复后的选题");
 
-const matchedDomain = await matchArticleDomainFromTitle("孩子用 AI 写作业，学校到底该怎么管", "zh", async (prompt) => {
+const matchedDomain = await matchArticleDomainFromTitle("孩子用 AI 写作业，学校到底该怎么管", "zh", async (prompt, opts) => {
   assert.ok(prompt.includes("孩子用 AI 写作业"));
+  assert.equal(opts?.disableThinking, true);
   return JSON.stringify({
     domainId: "education",
     confidence: 91,
@@ -237,9 +247,10 @@ const article = await generateArticleDraft(
     researchContext: `来源：Industry Report\n${articleResearchTitle}`,
     lang: "zh",
   },
-  async (prompt) => {
+  async (prompt, opts) => {
     articleDraftCalls += 1;
     articlePrompt = prompt;
+    assert.equal(opts?.disableThinking, true);
     return JSON.stringify({
       title: "小团队用 AI，先别急着买工具",
       paragraphs: [inBandParagraph, inBandParagraph, inBandParagraph, inBandParagraph],
@@ -274,8 +285,8 @@ const expandedArticle = await generateArticleDraft(
   },
   async (prompt, opts) => {
     lengthFixCalls += 1;
-    // 长文/常规档必须显式抬高输出上限，否则会被服务商默认截断
-    assert.equal(opts?.maxTokens, 5000);
+    assert.equal("maxTokens" in (opts ?? {}), false);
+    assert.equal(opts?.disableThinking, true);
     if (lengthFixCalls === 1) {
       return JSON.stringify({ title: "太短的草稿", paragraphs: ["只有一小段，远低于常规档的字数要求。"] });
     }
@@ -315,29 +326,79 @@ await assert.rejects(
 );
 assert.equal(boundedFixCalls, 3);
 
-// 有编号资料时，正文必须逐段带有效引用；系统自动修复一次且引用编号不影响字数。
-let citationFixCalls = 0;
-const citationFixedArticle = await generateArticleDraft(
+// 模型常把引用编号/标点也算进字数，容易在边界上下偏约 1-2%。
+// 两轮模型校准后，小幅超出应本地收敛到上限，小幅不足应补非事实性收束句。
+let overrunCalls = 0;
+const exactZhParagraphs = (length: number, count = 10) =>
+  Array.from({ length: count }, (_, index) => {
+    const size = Math.floor(length / count) + (index < length % count ? 1 : 0);
+    return `${"甲".repeat(Math.max(1, size - 1))}。`;
+  });
+const normalizedOverrun = await generateArticleDraft(
   {
     domainName: domain.name,
-    topic: "citation integrity",
+    topic: "small length overrun",
+    targetLength: "medium",
+    lang: "zh",
+  },
+  async (_prompt, opts) => {
+    overrunCalls += 1;
+    assert.equal(opts?.disableThinking, true);
+    const lengths = [1500, 1400, 1319];
+    return JSON.stringify({
+      title: "边界压缩",
+      paragraphs: exactZhParagraphs(lengths[overrunCalls - 1]),
+    });
+  }
+);
+assert.equal(overrunCalls, 3);
+assert.ok((normalizedOverrun.length?.actual ?? 0) >= 1000);
+assert.ok((normalizedOverrun.length?.actual ?? 0) <= 1300);
+assert.equal(normalizedOverrun.length?.inRange, true);
+
+let underrunCalls = 0;
+const normalizedUnderrun = await generateArticleDraft(
+  {
+    domainName: domain.name,
+    topic: "small length underrun",
+    targetLength: "medium",
+    lang: "zh",
+  },
+  async (_prompt, opts) => {
+    underrunCalls += 1;
+    assert.equal(opts?.disableThinking, true);
+    const lengths = [700, 850, 981];
+    return JSON.stringify({ title: "边界扩充", paragraphs: ["乙".repeat(lengths[underrunCalls - 1])] });
+  }
+);
+assert.equal(underrunCalls, 3);
+assert.ok((normalizedUnderrun.length?.actual ?? 0) >= 1000);
+assert.ok((normalizedUnderrun.length?.actual ?? 0) <= 1300);
+assert.equal(normalizedUnderrun.length?.inRange, true);
+
+// 引用用于事实核验，但不再是整篇文章的阻断门槛：开头、过渡、分析和收束
+// 可以没有编号，也不应触发额外的强制引用重写。
+let uncitedDraftCalls = 0;
+const uncitedArticle = await generateArticleDraft(
+  {
+    domainName: domain.name,
+    topic: "non-blocking citation guidance",
     targetLength: "short",
     lang: "en",
     researchContext: "--- 来源资料 1 ---\n标题: Verified source\n来源: Example\n链接: https://example.com/source",
   },
-  async (prompt) => {
-    citationFixCalls += 1;
-    const body = `${"word ".repeat(349)}claim`;
-    if (citationFixCalls === 1) {
-      return JSON.stringify({ title: "Citation gate", paragraphs: [body] });
-    }
-    assert.ok(prompt.includes("valid, verifiable source marker") || prompt.includes("Every body paragraph"));
-    return JSON.stringify({ title: "Citation gate", paragraphs: [`${body} [1]`] });
+  async (_prompt, opts) => {
+    uncitedDraftCalls += 1;
+    assert.equal(opts?.disableThinking, true);
+    return JSON.stringify({
+      title: "Citations help without blocking",
+      paragraphs: [`${"word ".repeat(349)}analysis`],
+    });
   }
 );
-assert.equal(citationFixCalls, 2);
-assert.equal(citationFixedArticle.length?.actual, 350);
-assert.ok(citationFixedArticle.paragraphs[0].endsWith("[1]"));
+assert.equal(uncitedDraftCalls, 1);
+assert.equal(uncitedArticle.length?.actual, 350);
+assert.equal(uncitedArticle.paragraphs[0].includes("["), false);
 
 let articleRepairCalls = 0;
 const repairedArticle = await generateArticleDraft(
@@ -346,8 +407,9 @@ const repairedArticle = await generateArticleDraft(
     topic: topics[0],
     targetLength: "short",
   },
-  async () => {
+  async (_prompt, opts) => {
     articleRepairCalls += 1;
+    assert.equal(opts?.disableThinking, true);
     if (articleRepairCalls === 1) {
       return '{"title":"Broken article","paragraphs":["Missing tail"';
     }
@@ -361,6 +423,64 @@ const repairedArticle = await generateArticleDraft(
 assert.equal(articleRepairCalls, 3);
 assert.equal(repairedArticle.title, "修复后的文章");
 assert.equal(repairedArticle.length?.actual, 350);
+
+// 思考模型可能耗尽 token 后返回空 content：必须跳过无意义的 JSON 修复，
+// 用完整生成提示重试一次，并且每次都显式关闭 provider thinking。
+let emptyDraftCalls = 0;
+const recoveredEmptyDraft = await generateArticleDraft(
+  {
+    domainName: domain.name,
+    topic: "empty visible content",
+    targetLength: "short",
+    lang: "en",
+  },
+  async (_prompt, opts) => {
+    emptyDraftCalls += 1;
+    assert.equal(opts?.disableThinking, true);
+    if (emptyDraftCalls === 1) return "";
+    return JSON.stringify({ title: "Recovered draft", paragraphs: ["word ".repeat(350)] });
+  }
+);
+assert.equal(emptyDraftCalls, 2);
+assert.equal(recoveredEmptyDraft.title, "Recovered draft");
+assert.equal(recoveredEmptyDraft.length?.inRange, true);
+
+let transientProviderCalls = 0;
+const recoveredProviderDraft = await generateArticleDraft(
+  {
+    domainName: domain.name,
+    topic: "transient provider error",
+    targetLength: "short",
+    lang: "en",
+  },
+  async (_prompt, opts) => {
+    transientProviderCalls += 1;
+    assert.equal(opts?.disableThinking, true);
+    if (transientProviderCalls === 1) throw new Error("temporary provider failure");
+    return JSON.stringify({ title: "Recovered provider draft", paragraphs: ["word ".repeat(350)] });
+  }
+);
+assert.equal(transientProviderCalls, 2);
+assert.equal(recoveredProviderDraft.length?.inRange, true);
+
+let unusableDraftCalls = 0;
+await assert.rejects(
+  () => generateArticleDraft(
+    {
+      domainName: domain.name,
+      topic: "persistently empty visible content",
+      targetLength: "short",
+      lang: "en",
+    },
+    async (_prompt, opts) => {
+      unusableDraftCalls += 1;
+      assert.equal(opts?.disableThinking, true);
+      return "";
+    }
+  ),
+  (error: unknown) => error instanceof ArticleModelOutputError
+);
+assert.equal(unusableDraftCalls, 2);
 
 const docParagraphs = articleToDocParagraphs(article);
 assert.equal(docParagraphs[0].kind, "heading1");

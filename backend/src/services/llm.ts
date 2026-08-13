@@ -10,8 +10,14 @@ const client = new OpenAI({
 export interface ChatOptions {
   system?: string;
   temperature?: number;
-  /** Output token cap; set higher for long HTML/document generation. */
-  maxTokens?: number;
+  /**
+   * Disable provider-side reasoning for strict structured-output calls.
+   *
+   * Some providers count hidden reasoning and visible content against the same
+   * token cap. A reasoning-heavy request can therefore finish with an empty
+   * `content` field even though the completion itself succeeded.
+   */
+  disableThinking?: boolean;
 }
 
 /**
@@ -29,10 +35,9 @@ export async function chat(prompt: string, opts: ChatOptions = {}): Promise<stri
   const res = await client.chat.completions.create({
     model: config.llm.model,
     temperature: opts.temperature ?? config.llm.temperature,
-    ...(opts.maxTokens ? { max_tokens: opts.maxTokens } : {}),
     messages,
     stream: false,
-    ...deepSeekOptions(),
+    ...deepSeekOptions(opts),
   } as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming & Record<string, unknown>);
   return res.choices[0]?.message?.content ?? "";
 }
@@ -59,7 +64,7 @@ export async function chatStream(
     temperature: opts.temperature ?? config.llm.temperature,
     messages,
     stream: true,
-    ...deepSeekOptions(),
+    ...deepSeekOptions(opts),
   } as OpenAI.Chat.ChatCompletionCreateParamsStreaming & Record<string, unknown>);
 
   let full = "";
@@ -87,8 +92,8 @@ export async function health(): Promise<{ ok: boolean; model: string; error?: st
   }
 }
 
-/** Values that disable an optional extra; local servers usually reject these params. */
-const OFF = new Set(["", "off", "none", "disabled", "false", "0"]);
+/** Values that omit an optional extra; local servers usually reject these params. */
+const OMIT = new Set(["", "off", "none", "false", "0"]);
 
 /**
  * Build provider-specific extra params (`thinking`, `reasoning_effort`).
@@ -98,10 +103,27 @@ const OFF = new Set(["", "off", "none", "disabled", "false", "0"]);
  *
  * @returns Extra request fields to spread into the completion call.
  */
-function deepSeekOptions(): Record<string, unknown> {
+function deepSeekOptions(opts: ChatOptions = {}): Record<string, unknown> {
   const extra: Record<string, unknown> = {};
   const { thinkingType, reasoningEffort } = config.llm;
-  if (thinkingType && !OFF.has(thinkingType.toLowerCase())) extra.thinking = { type: thinkingType };
-  if (reasoningEffort && !OFF.has(reasoningEffort.toLowerCase())) extra.reasoning_effort = reasoningEffort;
+  const normalizedThinking = thinkingType.trim().toLowerCase();
+  if (opts.disableThinking) {
+    // Only send this provider-specific override when thinking was explicitly
+    // configured. Generic OpenAI-compatible servers otherwise see no extra.
+    if (thinkingType && !OMIT.has(normalizedThinking)) {
+      extra.thinking = { type: "disabled" };
+    }
+    return extra;
+  }
+  if (thinkingType && !OMIT.has(normalizedThinking)) extra.thinking = { type: thinkingType };
+  // An explicit `disabled` must reach providers whose default is thinking-on.
+  // It also makes a reasoning-effort hint contradictory, so omit that hint.
+  if (
+    normalizedThinking !== "disabled" &&
+    reasoningEffort &&
+    !OMIT.has(reasoningEffort.toLowerCase())
+  ) {
+    extra.reasoning_effort = reasoningEffort;
+  }
   return extra;
 }

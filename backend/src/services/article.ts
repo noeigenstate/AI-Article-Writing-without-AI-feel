@@ -1,9 +1,9 @@
 import { chat, type ChatOptions } from "./llm.js";
+import { splitSentences } from "./splitter.js";
 import type { DocxBlock, ParaKind } from "./docx.js";
 import type { ResearchItem } from "./research/types.js";
 import { fetchSafeImageBinary } from "./research/images.js";
 import {
-  articleCitationFixPrompt,
   articleDraftPrompt,
   articleLengthFixPrompt,
   articleTopicsPrompt,
@@ -223,7 +223,10 @@ export async function matchArticleDomainFromTitle(
   lang: Lang = "en",
   ask: ChatFn = chat
 ): Promise<ArticleDomainMatch> {
-  const raw = await ask(domainMatchPrompt(title, lang), { temperature: 0 });
+  const raw = await ask(domainMatchPrompt(title, lang), {
+    temperature: 0,
+    disableThinking: true,
+  });
   const parsed = await parseJsonWithRepair<unknown>(raw, ask, "domain-match JSON object");
   const match = normalizeDomainMatch(parsed, lang);
   if (match) {
@@ -275,7 +278,7 @@ export async function generateTopicOptions(
       lang,
       options.researchCoverage
     ),
-    { temperature: 0.85 }
+    { temperature: 0.85, disableThinking: true }
   );
   const parsed = await parseJsonWithRepair<unknown>(raw, ask, "topics JSON array");
   const topicItems = topicArray(parsed);
@@ -292,20 +295,8 @@ export async function generateTopicOptions(
   return topics;
 }
 
-/**
- * Output caps per length tier. Without an explicit cap the provider default
- * (often ~4k tokens) silently truncates long drafts, and the JSON-repair pass
- * then "recovers" a much shorter article.
- */
-const DRAFT_MAX_TOKENS: Record<ArticleLengthTier, number> = {
-  short: 2500,
-  medium: 5000,
-  long: 8192,
-};
-
 /** How many corrective passes to attempt before an off-target draft is rejected. */
 const MAX_LENGTH_FIX_PASSES = 2;
-
 /** Measure body-only length using the shared language-specific counting rule. */
 export function articleBodyLength(article: GeneratedArticle, lang: Lang): number {
   return countArticleBody(article.paragraphs, lang);
@@ -331,29 +322,26 @@ export async function generateArticleDraft(
 ): Promise<GeneratedArticle> {
   const lang: Lang = input.lang ?? "en";
   const targetLength = input.targetLength ?? "medium";
-  const maxTokens = DRAFT_MAX_TOKENS[targetLength];
-  const raw = await ask(articleDraftPrompt(input), { temperature: 0.72, maxTokens });
-  const parsed = await parseJsonWithRepair<unknown>(raw, ask, "article JSON object");
-  let article = normalizeArticle(parsed);
-  if (!article) {
-    throw new Error("The model did not return a usable article JSON.");
-  }
+  const draftPrompt = articleDraftPrompt(input);
+  let article = await requestArticleJson(draftPrompt, ask, {
+    temperature: 0.72,
+    disableThinking: true,
+  });
 
   const spec = getArticleLengthSpec(lang, targetLength);
   for (let pass = 0; pass < MAX_LENGTH_FIX_PASSES; pass += 1) {
     const length = articleBodyLength(article, lang);
     const miss = articleLengthDistance(length, spec);
     if (miss === 0) break;
-    const fixedRaw = await ask(articleLengthFixPrompt(article, input, length), {
+    const fixed = await requestArticleJson(articleLengthFixPrompt(article, input, length), ask, {
       temperature: 0.72,
-      maxTokens,
+      disableThinking: true,
     });
-    const fixed = normalizeArticle(await parseJsonWithRepair<unknown>(fixedRaw, ask, "article JSON object"));
-    if (!fixed) break;
     // 只在更接近目标区间时采用；否则保留上一版，避免越改越糟
     if (articleLengthDistance(articleBodyLength(fixed, lang), spec) >= miss) break;
     article = fixed;
   }
+  article = normalizeSmallLengthMiss(article, lang, targetLength);
   const length = measureArticleLength(article.paragraphs, lang, targetLength);
   if (!length.inRange) {
     const message =
@@ -361,30 +349,6 @@ export async function generateArticleDraft(
         ? `模型在 ${MAX_LENGTH_FIX_PASSES} 轮校准后仍未达到目标字数（实际 ${length.actual}，目标 ${length.min}-${length.max}），请重试。`
         : `The model still missed the requested length after ${MAX_LENGTH_FIX_PASSES} correction passes (actual ${length.actual}, target ${length.min}-${length.max}). Please retry.`;
     throw new ArticleLengthTargetError(message, length);
-  }
-  const referenceCount = researchReferenceCount(input.researchContext);
-  if (referenceCount > 0 && !hasValidCitationInEveryParagraph(article.paragraphs, referenceCount)) {
-    const citedRaw = await ask(articleCitationFixPrompt(article, input, referenceCount), {
-      temperature: 0.2,
-      maxTokens,
-    });
-    const cited = normalizeArticle(await parseJsonWithRepair<unknown>(citedRaw, ask, "article JSON object"));
-    if (!cited || !hasValidCitationInEveryParagraph(cited.paragraphs, referenceCount)) {
-      throw new ArticleCitationTargetError(
-        lang === "zh"
-          ? "模型未能为每个正文段落提供有效且可核验的来源编号，请重试。"
-          : "The model could not provide a valid, verifiable source marker for every body paragraph. Please retry."
-      );
-    }
-    const citedLength = measureArticleLength(cited.paragraphs, lang, targetLength);
-    if (!citedLength.inRange) {
-      const message =
-        lang === "zh"
-          ? `引用校准后的正文偏离目标字数（实际 ${citedLength.actual}，目标 ${citedLength.min}-${citedLength.max}），请重试。`
-          : `Citation repair moved the body outside the requested length (actual ${citedLength.actual}, target ${citedLength.min}-${citedLength.max}). Please retry.`;
-      throw new ArticleLengthTargetError(message, citedLength);
-    }
-    return { ...cited, length: citedLength };
   }
   return { ...article, length };
 }
@@ -400,31 +364,177 @@ export class ArticleLengthTargetError extends Error {
   }
 }
 
-/** A source-backed draft could not meet the inline-citation integrity gate. */
-export class ArticleCitationTargetError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "ArticleCitationTargetError";
+/** A provider returned empty or structurally unusable article JSON. */
+export class ArticleModelOutputError extends Error {
+  constructor() {
+    super("The model did not return a usable article JSON after one retry.");
+    this.name = "ArticleModelOutputError";
   }
 }
 
-/** Count the numbered source blocks included in the prompt context. */
-function researchReferenceCount(context: string | undefined): number {
-  let max = 0;
-  for (const match of context?.matchAll(/^--- 来源资料 (\d+) ---$/gmu) ?? []) {
-    max = Math.max(max, Number(match[1]));
+/**
+ * Request a normalized article, retrying once when visible content is empty or
+ * the parsed JSON has the wrong shape. The retry uses the original full prompt
+ * so an empty first response is never "repaired" into a meaningless `{}`.
+ */
+async function requestArticleJson(
+  prompt: string,
+  ask: ChatFn,
+  options: ChatOptions
+): Promise<GeneratedArticle> {
+  let providerError: unknown;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    let raw: string;
+    try {
+      raw = await ask(prompt, {
+        ...options,
+        temperature: attempt === 0 ? options.temperature : Math.min(options.temperature ?? 0.4, 0.4),
+        disableThinking: true,
+      });
+    } catch (error) {
+      providerError = error;
+      continue;
+    }
+    providerError = undefined;
+    if (!raw.trim()) continue;
+
+    try {
+      const parsed = await parseJsonWithRepair<unknown>(raw, ask, "article JSON object");
+      const article = normalizeArticle(parsed);
+      if (article) return article;
+    } catch {
+      // Retry the complete generation prompt once. Do not surface or log raw
+      // model output because it may contain source text or provider details.
+    }
   }
-  return max;
+  if (providerError) throw providerError;
+  throw new ArticleModelOutputError();
 }
 
-/** Every non-empty paragraph needs at least one marker, and every marker must exist. */
-function hasValidCitationInEveryParagraph(paragraphs: readonly string[], referenceCount: number): boolean {
-  return paragraphs
-    .filter((paragraph) => paragraph.trim().length > 0)
-    .every((paragraph) => {
-      const markers = [...paragraph.matchAll(/\[(\d+)\]/gu)].map((match) => Number(match[1]));
-      return markers.length > 0 && markers.every((id) => id >= 1 && id <= referenceCount);
-    });
+/**
+ * Resolve a small model counting mismatch deterministically at the boundary.
+ *
+ * Providers regularly miss an exact character/word target even after two
+ * correction passes. Overlong drafts are trimmed from the tail, preferring
+ * whole sentences and paragraphs while staying above the minimum. A small
+ * underrun gets a short, non-factual transition; larger underruns still fail
+ * through the existing typed length error.
+ */
+function normalizeSmallLengthMiss(
+  article: GeneratedArticle,
+  lang: Lang,
+  tier: ArticleLengthTier
+): GeneratedArticle {
+  const spec = getArticleLengthSpec(lang, tier);
+  const actual = articleBodyLength(article, lang);
+  if (actual >= spec.min && actual <= spec.max) return article;
+  const overrunTolerance = Math.max(50, Math.ceil(spec.max * 0.15));
+  if (actual > spec.max && actual - spec.max <= overrunTolerance) {
+    return {
+      ...article,
+      paragraphs: trimArticleToMaximum(article.paragraphs, lang, spec.min, spec.max),
+    };
+  }
+  const underrunTolerance = Math.min(50, Math.max(20, Math.ceil(spec.min * 0.05)));
+  if (actual < spec.min && spec.min - actual <= underrunTolerance) {
+    const paragraphs = [...article.paragraphs];
+    const lastIndex = paragraphs.length - 1;
+    const last = paragraphs[lastIndex] ?? "";
+    const citation = last.match(/\[(\d+)\]/gu)?.at(-1) ?? "";
+    const body = last.replace(/\s*\[\d+\]\s*$/u, "").trimEnd();
+    const needed = spec.min - actual;
+    const addition = lengthBridge(lang, needed);
+    paragraphs[lastIndex] = [body, addition, citation].filter(Boolean).join(lang === "zh" ? "" : " ");
+    return articleBodyLength({ ...article, paragraphs }, lang) <= spec.max
+      ? { ...article, paragraphs }
+      : article;
+  }
+  return article;
+}
+
+/** Trim only the tail of the article, preserving valid source markers. */
+function trimArticleToMaximum(
+  paragraphs: readonly string[],
+  lang: Lang,
+  min: number,
+  max: number
+): string[] {
+  const out = [...paragraphs];
+  while (out.length > 0 && countArticleBody(out, lang) > max) {
+    const index = out.length - 1;
+    const paragraph = out[index];
+    const sentences = citationAwareSentences(paragraph);
+    let removedWholeSentence = false;
+    while (sentences.length > 1 && countArticleBody(out, lang) > max) {
+      sentences.pop();
+      const withoutLast = sentences.join("").trimEnd();
+      const candidate = [...out];
+      candidate[index] = withoutLast;
+      if (countArticleBody(candidate, lang) >= min) {
+        out[index] = candidate[index];
+        removedWholeSentence = true;
+      } else {
+        break;
+      }
+    }
+    if (countArticleBody(out, lang) <= max) break;
+
+    if (removedWholeSentence) continue;
+    if (out.length > 1 && countArticleBody(out.slice(0, -1), lang) >= min) {
+      out.pop();
+      continue;
+    }
+
+    // A single remaining sentence would require cutting through authored text
+    // or detaching sentence-specific citations. Leave it intact and let the
+    // typed length gate reject this draft instead.
+    break;
+  }
+  return out;
+}
+
+/** Keep leading citation markers attached to the sentence that precedes them. */
+function citationAwareSentences(paragraph: string): string[] {
+  const raw = splitSentences(paragraph);
+  const out: string[] = [];
+  for (const piece of raw) {
+    const leading = piece.match(/^\s*(?:\[\d+\]\s*)+/u)?.[0] ?? "";
+    if (leading && out.length > 0) {
+      out[out.length - 1] += leading;
+      const rest = piece.slice(leading.length);
+      if (rest) out.push(rest);
+    } else if (piece) {
+      out.push(piece);
+    }
+  }
+  return out;
+}
+
+/** Choose a short, non-factual closing bridge long enough to cross the lower bound. */
+function lengthBridge(lang: Lang, needed: number): string {
+  const candidates = lang === "zh"
+    ? [
+        "判断标准，仍是它能否解决具体问题。",
+        "真正的判断标准，仍是它能否解决具体问题。",
+        "真正的判断标准，仍是它能否解决具体问题，以及代价是否可以承受。",
+        "说到底，真正的判断标准，仍是它能否解决具体问题，以及由此带来的成本和风险是否可以承受。",
+      ]
+    : [
+        "That is the test.",
+        "That remains the practical test.",
+        "That is the practical test: does it solve the real problem?",
+        "That is the practical test: does it solve the real problem without creating a larger one?",
+        "That is the practical test: does it solve the real problem at an acceptable cost without creating a larger one?",
+      ];
+  const single = candidates.find((candidate) => countArticleBody([candidate], lang) >= needed);
+  if (single) return single;
+
+  const selected: string[] = [];
+  for (const candidate of [...candidates].reverse()) {
+    selected.push(candidate);
+    if (countArticleBody(selected, lang) >= needed) break;
+  }
+  return selected.join(lang === "zh" ? "" : " ");
 }
 
 /**

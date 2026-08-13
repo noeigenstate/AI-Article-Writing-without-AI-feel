@@ -156,7 +156,7 @@ Writing prompts ask the model to compare shared facts, narrative differences, in
 
 The writing prompt tells the model to paraphrase web material by default. When exact wording matters, it asks for no more than 60 Chinese characters or 25 English words and an immediate citation. Public comments are labeled for personal experience, disagreement, or counterpoints rather than facts or statistics; quotations and semantic attribution should still receive a human check before publication.
 
-Inline `[n]` citations must resolve to the retrieved source list. If any body paragraph lacks a valid marker, the backend runs one evidence-aware repair pass and rejects the draft if citation integrity still fails; markers pointing at nonexistent references are stripped rather than fabricated. Source images are downloaded through the backend's outbound-safety policy and embedded in Word and browser preview data rather than loaded remotely by the browser.
+Inline `[n]` markers are kept only when they resolve to retrieved sources. The model is asked to cite factual claims and external material where possible, but missing markers do not block generation; out-of-range markers are stripped, uncited prose remains uncited, and the retrieved reference list is still attached. Source images are downloaded through the backend's outbound-safety policy and embedded in Word and browser preview data rather than loaded remotely by the browser.
 
 ## Article Length Targets
 

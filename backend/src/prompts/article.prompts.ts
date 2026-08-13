@@ -112,7 +112,7 @@ ${input.researchContext || "（暂无实时资料。不要编造新闻、论文�
 写作要求：
 1. 开头直接进入问题或场景，不要说"在当今时代""随着发展"。
 2. 只使用上方参考资料能支撑的事实、数据、机构名、论文结论、网页文章和新闻事件。资料里没有的内容，不要写。
-3. 每个事实或判断段必须有论文、网页文章或新闻来源支撑，并在相关句末使用引用编号，如 [1]、[2]。引用编号只能来自"来源资料 N"。
+3. 涉及事实、数据、机构、论文、网页文章或新闻事件时，在相关句末尽量标注能直接支撑它的来源编号，如 [1]、[2]。引用编号只能来自"来源资料 N"；开头、过渡、个人分析和收束段无需为了凑编号强行引用。
 4. "公开评论/讨论"只能用来呈现个人体验、舆论分歧或反方视角。必须写清是谁、在哪个平台表达，不能把个别评论写成普遍事实、统计结论或权威证据。
 5. 摘录默认转述。只有原话本身有分析价值时才直接引用；中文原话每处不超过 60 个字，英文不超过 25 个词，不拼接多段原文，并在引号后立刻标注引用编号。
 6. ${articleRegionRule("zh", input.researchCoverage)}
@@ -147,7 +147,7 @@ ${input.researchContext || "(no live material. Do not invent news, papers, or da
 Requirements:
 1. Open straight into the problem or scene; do not say "In today's era" or "With the development of".
 2. Use only facts, numbers, institution names, paper findings, web articles, and news events that the material above can support. If it is not in the material, do not write it.
-3. Every factual or judgment paragraph must be backed by a paper, web article, or news source, with a citation number on the relevant sentence, e.g. [1], [2]. Citation numbers may only come from "source material N".
+3. When stating facts, numbers, institutions, paper findings, web articles, or news events, cite a source that directly supports the relevant sentence where possible, e.g. [1], [2]. Citation numbers may only come from "source material N"; do not force citations into openings, transitions, personal analysis, or closing paragraphs merely to fill a marker.
 4. Treat "public comment/discussion" only as personal experience, disagreement, or a counterpoint. Attribute the speaker and platform; never turn one comment into a general fact, statistic, or authoritative evidence.
 5. Paraphrase excerpts by default. Quote directly only when the wording itself matters: no more than 25 English words or 60 Chinese characters per quote, never stitch passages together, and place the citation immediately after the quote.
 6. ${articleRegionRule("en", input.researchCoverage)}
@@ -242,60 +242,6 @@ Requirements:
 Output strictly a JSON object:
 {"title":"Article title","paragraphs":["First paragraph","Second paragraph"]}
 No extra text, no markdown code block.`;
-}
-
-/** Repair missing/out-of-range inline citations without inventing attribution. */
-export function articleCitationFixPrompt(
-  article: GeneratedArticle,
-  input: GenerateArticleInput,
-  referenceCount: number
-): string {
-  const lang: Lang = input.lang ?? "en";
-  const tier = input.targetLength ?? "medium";
-  const spec = getArticleLengthSpec(lang, tier);
-  const draftJson = JSON.stringify({ title: article.title, paragraphs: article.paragraphs });
-
-  if (lang === "zh") {
-    return `${ANTI_AI_RULES_ZH}
-
-下面的文章有段落缺少有效来源编号，或使用了不存在的编号。请只修复引用与必要的事实表述。
-
-原稿（JSON）：
-${draftJson}
-
-参考资料：
-${input.researchContext || "（无资料）"}
-
-要求：
-1. 每个正文段落至少包含一个由该段内容真正支持的引用编号 [n]；n 只能是 1-${referenceCount}。
-2. 不要为了补编号而随意挂来源。若资料不能支持某句话，改成资料能支持的准确表述或删除它。
-3. 公开评论只能支撑个人体验、争议或反方观点，不能支撑事实或统计。
-4. 除引用和必要的事实校正外，不改变标题、结构、语气和篇幅。
-5. 正文仍须保持在 ${spec.min}-${spec.max} 字之间；[n] 不计入字数。
-
-严格只输出 JSON 对象：
-{"title":"文章标题","paragraphs":["第一段正文 [1]","第二段正文 [2]"]}`;
-  }
-
-  return `${ANTI_AI_RULES_EN}
-
-The article below has paragraphs with missing or out-of-range source markers. Repair only the citations and any factual wording needed to make those citations honest.
-
-Draft (JSON):
-${draftJson}
-
-Reference material:
-${input.researchContext || "(none)"}
-
-Requirements:
-1. Every body paragraph must contain at least one citation [n] that genuinely supports that paragraph; n may only be 1-${referenceCount}.
-2. Never attach a source merely to fill a marker. If the evidence cannot support a sentence, rewrite it accurately from the material or remove it.
-3. Public comments may support personal experience, disagreement, or counterpoints only—not facts or statistics.
-4. Apart from citation and necessary factual correction, preserve the title, structure, voice, and length.
-5. Keep the body within ${spec.min}-${spec.max} words; [n] markers do not count toward length.
-
-Output strictly one JSON object:
-{"title":"Article title","paragraphs":["First paragraph [1]","Second paragraph [2]"]}`;
 }
 
 /** Build tier-specific prompt guidance from the shared runtime specification. */

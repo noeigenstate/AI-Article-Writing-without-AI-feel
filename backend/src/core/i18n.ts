@@ -22,6 +22,14 @@ type Bi = { en: string; zh: string };
 /** API 错误信息 / API error messages */
 export const SERVER_MESSAGES = {
   missingTopic: { en: "Missing topic.", zh: "缺少选题 topic" },
+  invalidTopic: {
+    en: "Invalid topic; provide a title or a generated topic option.",
+    zh: "选题格式无效，请提供标题或重新选择一个生成的选题",
+  },
+  invalidArticleOutput: {
+    en: "The model returned an incomplete article after an automatic retry. Please try again.",
+    zh: "模型返回的文章不完整，系统已自动重试一次，请重新生成",
+  },
   missingTitle: { en: "Missing article title.", zh: "缺少文章标题 title" },
   titleTooLong: {
     en: "Title is too long; keep it under 120 characters.",

@@ -261,7 +261,7 @@ export interface RegionalQueryPlan {
 
 export type RegionalQueryTranslator = (
   prompt: string,
-  options: { system: string; temperature: number; maxTokens: number }
+  options: { system: string; temperature: number }
 ) => Promise<string>;
 
 export interface ResolveRegionalQueryPlanOptions {
@@ -358,7 +358,7 @@ export async function resolveRegionalQueryPlan(
 
 async function defaultRegionalQueryTranslator(
   prompt: string,
-  options: { system: string; temperature: number; maxTokens: number }
+  options: { system: string; temperature: number }
 ): Promise<string> {
   return chat(prompt, options);
 }
@@ -387,7 +387,7 @@ async function translateRegionalQuery(
     domain: cleanSearchQuery(domainName),
   });
   const raw = await withTimeout(
-    translate(prompt, { system, temperature: 0, maxTokens: 180 }),
+    translate(prompt, { system, temperature: 0 }),
     Math.max(10, timeoutMs)
   );
   return parseTranslatedQuery(raw, sourceQuery, targetLanguage);
