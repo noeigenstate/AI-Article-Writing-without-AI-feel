@@ -10,6 +10,7 @@ import {
   diagnoseText,
   scoreText,
   type ArticleRenderBlockDTO,
+  type ArticleLengthDTO,
   type ArticleDomainDTO,
   type AiScoreDTO,
   type DiagnosticReportDTO,
@@ -31,6 +32,7 @@ interface WorkspaceState {
   styleSummary: string;
   paragraphs: ParagraphDTO[];
   renderBlocks: ArticleRenderBlockDTO[] | null;
+  length: ArticleLengthDTO | null;
   titleIndex: number;
   step: Step;
   busy: string | null;
@@ -49,6 +51,7 @@ interface State {
   styleSummary: string;
   paragraphs: ParagraphDTO[];
   renderBlocks: ArticleRenderBlockDTO[] | null;
+  length: ArticleLengthDTO | null;
   titleIndex: number;
   step: Step;
   mode: Mode;
@@ -92,6 +95,7 @@ const emptyWorkspace = (): WorkspaceState => ({
   styleSummary: "",
   paragraphs: [],
   renderBlocks: null,
+  length: null,
   titleIndex: -1,
   step: "upload",
   busy: null,
@@ -109,6 +113,7 @@ function workspaceFromState(s: State): WorkspaceState {
     styleSummary: s.styleSummary,
     paragraphs: s.paragraphs,
     renderBlocks: s.renderBlocks,
+    length: s.length,
     titleIndex: s.titleIndex,
     step: s.step,
     busy: s.busy,
@@ -223,6 +228,7 @@ export const useStore = create<State>((set, get) => ({
         styleSummary: r.styleSummary,
         paragraphs: r.paragraphs,
         renderBlocks: null,
+        length: null,
         titleIndex: r.titleIndex,
         research: null,
         aiScore: null,
@@ -248,6 +254,7 @@ export const useStore = create<State>((set, get) => ({
         styleSummary: r.styleSummary,
         paragraphs: r.paragraphs,
         renderBlocks: r.renderBlocks ?? null,
+        length: r.length ?? null,
         titleIndex: r.titleIndex,
         research: r.research ?? null,
         aiScore: null,
@@ -273,6 +280,7 @@ export const useStore = create<State>((set, get) => ({
         styleSummary: r.styleSummary,
         paragraphs: r.paragraphs,
         renderBlocks: r.renderBlocks ?? null,
+        length: r.length ?? null,
         titleIndex: r.titleIndex,
         research: r.research ?? null,
         aiScore: null,
@@ -333,7 +341,7 @@ export const useStore = create<State>((set, get) => ({
 
   async doExport() {
     const mode = get().mode;
-    const { docId, paragraphs } = get();
+    const { docId, paragraphs, lang } = get();
     if (!docId) return;
     set((s) => workspacePatch(s, mode, { busy: messages[get().lang].busyExporting, error: null }));
     try {
@@ -343,7 +351,7 @@ export const useStore = create<State>((set, get) => ({
         const current = p.sentences.join("");
         if (current !== p.original) texts[p.index] = current;
       }
-      await exportDoc(docId, texts);
+      await exportDoc(docId, texts, lang);
       set((s) => workspacePatch(s, mode, { busy: null }));
     } catch (e) {
       set((s) => workspacePatch(s, mode, { error: (e as Error).message, busy: null }));

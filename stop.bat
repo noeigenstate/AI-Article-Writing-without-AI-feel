@@ -1,8 +1,7 @@
 @echo off
 REM ===========================================================================
 REM Stop script for Speak Plainly (Windows).
-REM Stops backend/frontend windows started by run.bat, then cleans up matching
-REM Node/npm processes and the backend port if they are still running.
+REM Stops matching backend/frontend processes and the backend port.
 REM ===========================================================================
 setlocal
 cd /d "%~dp0"
@@ -10,7 +9,7 @@ set "SP_ROOT=%CD%"
 
 echo Stopping Speak Plainly services...
 
-REM Windows launcher creates these terminal windows. /T stops child processes.
+REM Backward-compatible cleanup for windows created by older run.bat versions.
 taskkill /FI "WINDOWTITLE eq Speak Plainly - backend*" /T /F >nul 2>nul
 taskkill /FI "WINDOWTITLE eq Speak Plainly - frontend*" /T /F >nul 2>nul
 

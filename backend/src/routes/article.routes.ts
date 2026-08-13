@@ -7,6 +7,8 @@ import {
   articleToRenderBlocks,
   enrichArticleWithResearch,
   generateArticleDraft,
+  ArticleCitationTargetError,
+  ArticleLengthTargetError,
   generateTopicOptions,
   matchArticleDomainFromTitle,
   resolveArticleDomain,
@@ -21,6 +23,11 @@ import { saveDoc } from "../core/store.js";
 import { getBuiltinStyle } from "../data/styles.js";
 import { writingSceneProfile } from "../data/writingScenes.js";
 import { normalizeLang, SERVER_MESSAGES, ARTICLE_LABELS, tr, type Lang } from "../core/i18n.js";
+import {
+  isArticleLengthTier,
+  measureArticleLength,
+  type ArticleLengthTier,
+} from "../services/articleLength.js";
 
 /** Routes for topic planning, research preview, and article generation. */
 const router = Router();
@@ -43,8 +50,14 @@ router.post("/api/article/topics", async (req, res) => {
     const lang = normalizeLang(rawLang);
     const domain = resolveArticleDomain(domainId, customDomain, lang);
     const bundle = await collectResearch(domain.name, domain.name);
-    const researchContext = formatResearchContext(bundle.items, 10);
-    const topics = await generateTopicOptions({ domain, n: n ?? 6, researchContext, lang });
+    const researchContext = formatResearchContext(bundle.items, 12);
+    const topics = await generateTopicOptions({
+      domain,
+      n: n ?? 6,
+      researchContext,
+      researchCoverage: bundle.coverage,
+      lang,
+    });
     res.json({ domain, topics, research: bundle });
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });
@@ -63,7 +76,7 @@ router.post("/api/research/preview", async (req, res) => {
     const lang = normalizeLang(rawLang);
     const domain = resolveArticleDomain(domainId, customDomain, lang);
     const bundle = await collectResearch(domain.name, query?.trim() || domain.name);
-    res.json({ ...bundle, context: formatResearchContext(bundle.items, 8) });
+    res.json({ ...bundle, context: formatResearchContext(bundle.items, 10) });
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });
   }
@@ -78,15 +91,26 @@ router.post("/api/article/generate", async (req, res) => {
       topic: TopicOption | string;
       styleId?: string;
       sceneId?: string;
-      targetLength?: "short" | "medium" | "long";
+      targetLength?: unknown;
       lang?: string;
     };
     const lang = normalizeLang(rawLang);
+    if (targetLength !== undefined && !isArticleLengthTier(targetLength)) {
+      return res.status(400).json({ error: tr(SERVER_MESSAGES.invalidTargetLength, lang) });
+    }
     if (!topic) return res.status(400).json({ error: tr(SERVER_MESSAGES.missingTopic, lang) });
 
     const domain = resolveArticleDomain(domainId, customDomain, lang);
     res.json(await generateArticlePayload({ domain, topic, styleId, sceneId, targetLength, lang }));
   } catch (e) {
+    if (e instanceof ArticleLengthTargetError) {
+      res.status(422).json({ error: e.message, length: e.length });
+      return;
+    }
+    if (e instanceof ArticleCitationTargetError) {
+      res.status(422).json({ error: e.message });
+      return;
+    }
     res.status(500).json({ error: (e as Error).message });
   }
 });
@@ -98,13 +122,16 @@ router.post("/api/article/generate-from-title", async (req, res) => {
       title?: string;
       styleId?: string;
       sceneId?: string;
-      targetLength?: "short" | "medium" | "long";
+      targetLength?: unknown;
       lang?: string;
     };
     const lang = normalizeLang(rawLang);
     const cleanTitle = title?.trim() ?? "";
     if (!cleanTitle) return res.status(400).json({ error: tr(SERVER_MESSAGES.missingTitle, lang) });
     if (cleanTitle.length > 120) return res.status(400).json({ error: tr(SERVER_MESSAGES.titleTooLong, lang) });
+    if (targetLength !== undefined && !isArticleLengthTier(targetLength)) {
+      return res.status(400).json({ error: tr(SERVER_MESSAGES.invalidTargetLength, lang) });
+    }
 
     const matchedDomain = await matchArticleDomainFromTitle(cleanTitle, lang);
     const defaultMatch = tr(ARTICLE_LABELS.defaultMatch, lang);
@@ -126,6 +153,14 @@ router.post("/api/article/generate-from-title", async (req, res) => {
     });
     res.json({ ...payload, domain: matchedDomain.domain, matchedDomain });
   } catch (e) {
+    if (e instanceof ArticleLengthTargetError) {
+      res.status(422).json({ error: e.message, length: e.length });
+      return;
+    }
+    if (e instanceof ArticleCitationTargetError) {
+      res.status(422).json({ error: e.message });
+      return;
+    }
     res.status(500).json({ error: (e as Error).message });
   }
 });
@@ -143,15 +178,16 @@ async function generateArticlePayload(input: {
   topic: TopicOption | string;
   styleId?: string;
   sceneId?: string;
-  targetLength?: "short" | "medium" | "long";
+  targetLength?: ArticleLengthTier;
   lang: Lang;
 }) {
   const { lang } = input;
+  const targetLength = input.targetLength ?? "medium";
   const topicTitle = typeof input.topic === "string" ? input.topic : input.topic.title;
   const bundle = await collectResearch(input.domain.name, topicTitle);
   const imageItems = await enrichResearchImages(bundle.items);
   const bundleWithImages = { ...bundle, items: imageItems };
-  const researchContext = formatResearchContext(bundleWithImages.items, 8);
+  const researchContext = formatResearchContext(bundleWithImages.items, 16);
   const builtin = input.styleId ? getBuiltinStyle(input.styleId, lang) : undefined;
   const sceneProfile = writingSceneProfile(input.sceneId, lang);
   const styleSummary = [sceneProfile, builtin?.profile ?? tr(ARTICLE_LABELS.defaultStyleSummary, lang)]
@@ -161,11 +197,13 @@ async function generateArticlePayload(input: {
     domainName: input.domain.name,
     topic: input.topic,
     styleSummary,
-    targetLength: input.targetLength ?? "medium",
+    targetLength,
     researchContext,
+    researchCoverage: bundle.coverage,
     lang,
   });
   const article = await enrichArticleWithResearch(draft, bundleWithImages.items, new Date(bundle.generatedAt), lang);
+  const length = measureArticleLength(article.paragraphs, lang, targetLength);
 
   const docx = await createDocxFromBlocks(articleToDocBlocks(article, lang));
   const parsed = await parseDocx(docx);
@@ -179,6 +217,7 @@ async function generateArticlePayload(input: {
   return {
     docId: rec.id,
     styleSummary,
+    length,
     research: bundleWithImages,
     renderBlocks,
     titleIndex: titleIndexOf(parsed.paragraphs),

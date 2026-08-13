@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { once } from "node:events";
+import type { AddressInfo } from "node:net";
 import JSZip from "jszip";
+import { createApp } from "../app.js";
 import { parseDocx, exportDocx, createDocxFromBlocks, createDocxFromParagraphs } from "../services/docx.js";
 import {
   ARTICLE_DOMAINS,
@@ -12,8 +15,14 @@ import {
   generateTopicOptions,
   matchArticleDomainFromTitle,
 } from "../services/article.js";
-import { articleDraftPrompt } from "../prompts/article.prompts.js";
+import { articleDraftPrompt, articleLengthFixPrompt, articleTopicsPrompt } from "../prompts/article.prompts.js";
 import { writingSceneProfile } from "../data/writingScenes.js";
+import {
+  ARTICLE_LENGTH_SPECS,
+  countArticleBody,
+  isArticleLengthTier,
+  measureArticleLength,
+} from "../services/articleLength.js";
 
 const docx = await createDocxFromParagraphs([
   { kind: "heading1", text: "这是一篇公众号文章标题" },
@@ -37,10 +46,102 @@ const lengthPromptBase = {
   domainName: domain.name,
   topic: { id: "length", title: "AI agents for small teams", angle: "cost and workflow", audience: "founders", keywords: ["AI"] },
   lang: "zh" as const,
+  researchCoverage: { domestic: 2, international: 2, global: 0, uniqueSources: 4 },
 };
-assert.ok(articleDraftPrompt({ ...lengthPromptBase, targetLength: "short" }).includes("约 500 字"));
-assert.ok(articleDraftPrompt({ ...lengthPromptBase, targetLength: "medium" }).includes("不少于 1000 字"));
-assert.ok(articleDraftPrompt({ ...lengthPromptBase, targetLength: "long" }).includes("3000 字以上"));
+assert.deepEqual(ARTICLE_LENGTH_SPECS.zh, {
+  short: { unit: "characters", min: 450, max: 650 },
+  medium: { unit: "characters", min: 1000, max: 1300 },
+  long: { unit: "characters", min: 3000, max: 3800 },
+});
+assert.deepEqual(ARTICLE_LENGTH_SPECS.en, {
+  short: { unit: "words", min: 350, max: 500 },
+  medium: { unit: "words", min: 850, max: 1100 },
+  long: { unit: "words", min: 2200, max: 2800 },
+});
+assert.ok(articleDraftPrompt({ ...lengthPromptBase, targetLength: "short" }).includes("450-650 字正文"));
+assert.ok(articleDraftPrompt({ ...lengthPromptBase, targetLength: "medium" }).includes("1000-1300 字正文"));
+assert.ok(articleDraftPrompt({ ...lengthPromptBase, targetLength: "long" }).includes("3000-3800 字正文"));
+assert.ok(
+  articleDraftPrompt({ ...lengthPromptBase, lang: "en", targetLength: "medium" }).includes("850-1100 body words")
+);
+assert.ok(
+  articleDraftPrompt({
+    ...lengthPromptBase,
+    researchCoverage: { domestic: 3, international: 0, global: 0, uniqueSources: 3 },
+  }).includes("不要虚构国际观点")
+);
+assert.ok(
+  articleDraftPrompt({
+    ...lengthPromptBase,
+    lang: "en",
+    researchCoverage: { domestic: 0, international: 3, global: 0, uniqueSources: 3 },
+  }).includes("do not invent domestic views")
+);
+assert.ok(articleDraftPrompt({ ...lengthPromptBase, targetLength: "medium" }).includes("同时使用国内外材料"));
+assert.ok(
+  articleDraftPrompt({ ...lengthPromptBase, lang: "en", targetLength: "medium" }).includes(
+    "Use both domestic and international material"
+  )
+);
+const crossRegionFixPrompt = articleLengthFixPrompt(
+  { title: "短稿", paragraphs: ["内容不足。"] },
+  { ...lengthPromptBase, targetLength: "medium" },
+  5
+);
+assert.ok(crossRegionFixPrompt.includes("优先补充国内外材料的跨区域对照"));
+assert.ok(crossRegionFixPrompt.includes("不要把来源数量当成共识证据"));
+assert.ok(articleTopicsPrompt("科技", "技术变化", 3, "", "zh").includes("国内外视角的共同点"));
+assert.ok(
+  articleTopicsPrompt("Technology", "technical change", 3, "", "en").includes(
+    "domestic and international perspectives"
+  )
+);
+assert.equal(isArticleLengthTier("short"), true);
+assert.equal(isArticleLengthTier("medium"), true);
+assert.equal(isArticleLengthTier("long"), true);
+assert.equal(isArticleLengthTier("regular"), false);
+assert.equal(isArticleLengthTier(3), false);
+
+// 两个生成入口都必须在进入研究/模型流程前拒绝非法 targetLength。
+const app = createApp();
+const server = app.listen(0);
+await once(server, "listening");
+try {
+  const port = (server.address() as AddressInfo).port;
+  for (const request of [
+    { path: "/api/article/generate", body: { topic: "Runtime validation", targetLength: "regular" } },
+    {
+      path: "/api/article/generate-from-title",
+      body: { title: "Runtime validation", targetLength: "regular" },
+    },
+  ]) {
+    const response = await fetch(`http://127.0.0.1:${port}${request.path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request.body),
+    });
+    assert.equal(response.status, 400);
+    assert.match(String((await response.json() as { error?: unknown }).error), /targetLength/);
+  }
+} finally {
+  server.close();
+  await once(server, "close");
+}
+
+// 标题不计入正文；中文去空白后按 Unicode code points（代理对 emoji 只算 1）计数。
+assert.equal(countArticleBody(["你 好", "🙂\n界"], "zh"), 4);
+assert.equal(countArticleBody(["正文[1]仍是正文[12]"], "zh"), 6);
+assert.equal(articleBodyLength({ title: "这个标题很长很长", paragraphs: ["正文"] }, "zh"), 2);
+assert.equal(countArticleBody(["One  two", "three\nfour"], "en"), 4);
+assert.equal(countArticleBody(["One claim [1] and another [22]"], "en"), 4);
+assert.deepEqual(measureArticleLength(["word ".repeat(350)], "en", "short"), {
+  tier: "short",
+  unit: "words",
+  actual: 350,
+  min: 350,
+  max: 500,
+  inRange: true,
+});
 assert.ok(writingSceneProfile("wechat", "zh").includes("公众号"));
 assert.ok(writingSceneProfile("technical", "en").includes("technical docs"));
 
@@ -125,7 +226,7 @@ assert.equal(matchedDomain.reasons.length, 2);
 let articlePrompt = "";
 let articleDraftCalls = 0;
 const articleResearchTitle = "Small Teams Adopt Agentic Workflows";
-// 三段各 ~140 字，总长落在 zh short 档的接受区间内，不应触发长度纠偏
+// 四段各 136 字，总长落在 zh short 档的精确区间内，不应触发长度纠偏
 const inBandParagraph = "小团队先把重复流程挑出来，再决定要不要上工具，这一步决定后面的成败。".repeat(4);
 const article = await generateArticleDraft(
   {
@@ -141,15 +242,23 @@ const article = await generateArticleDraft(
     articlePrompt = prompt;
     return JSON.stringify({
       title: "小团队用 AI，先别急着买工具",
-      paragraphs: [inBandParagraph, inBandParagraph, inBandParagraph],
+      paragraphs: [inBandParagraph, inBandParagraph, inBandParagraph, inBandParagraph],
     });
   }
 );
 assert.equal(article.title, "小团队用 AI，先别急着买工具");
-assert.equal(article.paragraphs.length, 3);
+assert.equal(article.paragraphs.length, 4);
 assert.ok(articlePrompt.includes(articleResearchTitle));
 // 长度已达标：只调用一次，不触发纠偏
 assert.equal(articleDraftCalls, 1);
+assert.deepEqual(article.length, {
+  tier: "short",
+  unit: "characters",
+  actual: 544,
+  min: 450,
+  max: 650,
+  inRange: true,
+});
 
 // 草稿明显低于目标档位时，触发一次扩写纠偏并采用达标结果
 let lengthFixCalls = 0;
@@ -178,11 +287,57 @@ const expandedArticle = await generateArticleDraft(
   }
 );
 assert.equal(lengthFixCalls, 2);
-assert.ok(lengthFixPrompt.includes("850-1600 字"));
+assert.ok(lengthFixPrompt.includes("1000-1300 字"));
 assert.ok(lengthFixPrompt.includes("扩写"));
 assert.ok(lengthFixPrompt.includes("太短的草稿"));
 const expandedLength = articleBodyLength(expandedArticle, "zh");
-assert.ok(expandedLength >= 850 && expandedLength <= 1600, `expanded length ${expandedLength} out of band`);
+assert.ok(expandedLength >= 1000 && expandedLength <= 1300, `expanded length ${expandedLength} out of band`);
+assert.equal(expandedArticle.length?.actual, expandedLength);
+assert.equal(expandedArticle.length?.inRange, true);
+
+// 最多两次纠偏：持续未达标时明确失败，不能把 off-band 草稿当成完成态。
+let boundedFixCalls = 0;
+await assert.rejects(
+  () => generateArticleDraft(
+    {
+      domainName: domain.name,
+      topic: "bounded retries",
+      targetLength: "short",
+      lang: "en",
+    },
+    async () => {
+      boundedFixCalls += 1;
+      const words = boundedFixCalls === 1 ? 10 : boundedFixCalls === 2 ? 100 : 200;
+      return JSON.stringify({ title: "Retry cap", paragraphs: ["word ".repeat(words)] });
+    }
+  ),
+  /actual 200, target 350-500/
+);
+assert.equal(boundedFixCalls, 3);
+
+// 有编号资料时，正文必须逐段带有效引用；系统自动修复一次且引用编号不影响字数。
+let citationFixCalls = 0;
+const citationFixedArticle = await generateArticleDraft(
+  {
+    domainName: domain.name,
+    topic: "citation integrity",
+    targetLength: "short",
+    lang: "en",
+    researchContext: "--- 来源资料 1 ---\n标题: Verified source\n来源: Example\n链接: https://example.com/source",
+  },
+  async (prompt) => {
+    citationFixCalls += 1;
+    const body = `${"word ".repeat(349)}claim`;
+    if (citationFixCalls === 1) {
+      return JSON.stringify({ title: "Citation gate", paragraphs: [body] });
+    }
+    assert.ok(prompt.includes("valid, verifiable source marker") || prompt.includes("Every body paragraph"));
+    return JSON.stringify({ title: "Citation gate", paragraphs: [`${body} [1]`] });
+  }
+);
+assert.equal(citationFixCalls, 2);
+assert.equal(citationFixedArticle.length?.actual, 350);
+assert.ok(citationFixedArticle.paragraphs[0].endsWith("[1]"));
 
 let articleRepairCalls = 0;
 const repairedArticle = await generateArticleDraft(
@@ -198,14 +353,14 @@ const repairedArticle = await generateArticleDraft(
     }
     return JSON.stringify({
       title: "修复后的文章",
-      paragraphs: ["第一段", "第二段"],
+      paragraphs: ["word ".repeat(articleRepairCalls === 2 ? 100 : 350)],
     });
   }
 );
-// 三次调用：草稿（坏 JSON）→ JSON 修复 → 一次长度纠偏（无改善即停，不会死循环）
+// 三次调用：草稿（坏 JSON）→ JSON 修复 → 一次长度纠偏并达标。
 assert.equal(articleRepairCalls, 3);
 assert.equal(repairedArticle.title, "修复后的文章");
-assert.equal(repairedArticle.paragraphs.length, 2);
+assert.equal(repairedArticle.length?.actual, 350);
 
 const docParagraphs = articleToDocParagraphs(article);
 assert.equal(docParagraphs[0].kind, "heading1");
@@ -220,11 +375,20 @@ const enriched = await enrichArticleWithResearch(
       "This paragraph cites a missing source. [9]",
       "This paragraph has no citation.",
     ],
+    length: {
+      tier: "short",
+      unit: "words",
+      actual: 20,
+      min: 350,
+      max: 500,
+      inRange: false,
+    },
   },
   [
     {
       id: "arxiv:1",
       sourceKind: "paper",
+      region: "international",
       sourceName: "arXiv",
       sourceId: "arxiv",
       title: "Useful AI Agents for Small Teams",
@@ -237,6 +401,7 @@ const enriched = await enrichArticleWithResearch(
     {
       id: "news:1",
       sourceKind: "news",
+      region: "international",
       sourceName: "Example Tech",
       sourceId: "example-tech",
       title: "Evidence Driven Article Chart",
@@ -255,6 +420,8 @@ const enriched = await enrichArticleWithResearch(
 assert.ok(enriched.paragraphs[0].includes("[1]"));
 assert.ok(!enriched.paragraphs[1].includes("[9]"));
 assert.ok(!/\[\d+\]/.test(enriched.paragraphs[2]));
+assert.equal(enriched.length?.actual, countArticleBody(enriched.paragraphs, "zh"));
+assert.equal(enriched.length?.tier, "short");
 assert.equal(enriched.references?.length, 2);
 assert.ok(enriched.references?.[0].text.includes("Ada Chen, Ben Rao"));
 assert.ok(
@@ -275,6 +442,7 @@ const matchedImageArticle = await enrichArticleWithResearch(
     {
       id: "news:wrong-image",
       sourceKind: "news",
+      region: "international",
       sourceName: "Example Markets",
       sourceId: "example-markets",
       title: "Chip Stocks Rise After Earnings",
@@ -288,6 +456,7 @@ const matchedImageArticle = await enrichArticleWithResearch(
     {
       id: "news:right-image",
       sourceKind: "news",
+      region: "international",
       sourceName: "Example Climate",
       sourceId: "example-climate",
       title: "River Flood Models Help Cities Prepare",
@@ -319,6 +488,7 @@ const backfilledArticle = await enrichArticleWithResearch(
     {
       id: "news:strong-image",
       sourceKind: "news",
+      region: "international",
       sourceName: "Example Climate",
       sourceId: "example-climate",
       title: "River Flood Sensors Help Cities",
@@ -332,6 +502,7 @@ const backfilledArticle = await enrichArticleWithResearch(
     {
       id: "news:weak-image",
       sourceKind: "news",
+      region: "international",
       sourceName: "Example Hardware",
       sourceId: "example-hardware",
       title: "Sensor Prices Fall",
@@ -345,6 +516,7 @@ const backfilledArticle = await enrichArticleWithResearch(
     {
       id: "news:zero-image",
       sourceKind: "news",
+      region: "international",
       sourceName: "Example Markets",
       sourceId: "example-markets",
       title: "Chip Stocks Rise",
@@ -379,6 +551,7 @@ const bodyImageArticle = await enrichArticleWithResearch(
     {
       id: "news:budget-image",
       sourceKind: "news",
+      region: "international",
       sourceName: "Example Work",
       sourceId: "example-work",
       title: "Travel Budget Charts Shape Remote Work Decisions",
@@ -424,6 +597,12 @@ assert.ok(!richParsed.paragraphs.some((p) => p.text.includes("表1 主要证据�
 
 const renderBlocks = articleToRenderBlocks(enriched, richParsed.paragraphs);
 assert.ok(renderBlocks.some((block) => block.type === "figure"));
+assert.ok(
+  renderBlocks
+    .filter((block): block is Extract<(typeof renderBlocks)[number], { type: "figure" }> => block.type === "figure")
+    .every((block) => block.svg.length > 0 && !("imageUrl" in block)),
+  "browser render blocks expose only backend-vetted inline SVG figures"
+);
 assert.ok(!renderBlocks.some((block) => block.type === "table"));
 assert.ok(renderBlocks.some((block) => block.type === "references"));
 

@@ -30,8 +30,9 @@ export function renderBlocksToMarkdown(blocks: ArticleRenderBlockDTO[], paragrap
       else if (b.kind === "list") lines.push(`- ${text}`);
       else lines.push(text);
     } else if (b.type === "figure") {
-      if (b.imageUrl) lines.push(`![${b.caption || b.title}](${b.imageUrl})`);
-      else lines.push(`【插入图表：${b.title}${b.caption ? `——${b.caption}` : ""}】`);
+      // Remote source-image URLs are deliberately not re-emitted: the editor
+      // only receives the backend's vetted, inlined SVG representation.
+      lines.push(`【插入图表：${b.title}${b.caption ? `——${b.caption}` : ""}】`);
     } else if (b.type === "table") {
       const header = `| ${b.columns.join(" | ")} |`;
       const divider = `| ${b.columns.map(() => "---").join(" | ")} |`;

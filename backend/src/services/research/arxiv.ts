@@ -101,6 +101,7 @@ export function parseArxivAtom(xml: string, query: string): ResearchItem[] {
         sourceKind: "paper",
         sourceName: "arXiv",
         sourceId: "arxiv",
+        region: "international",
         title,
         summary: cleanText(entry.summary as XmlValue) ?? "",
         url,

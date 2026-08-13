@@ -24,7 +24,7 @@ export default function UploadPanel() {
 
   return (
     <div className="upload">
-      <section className="step peach">
+      <section className="step upload-source">
         <div className="step-head">
           <span className="badge peach">1</span>
           <h2>{t.uploadTitle}</h2>
@@ -49,14 +49,18 @@ export default function UploadPanel() {
         </label>
       </section>
 
-      <section className="step mint">
+      <section className="step upload-style">
         <div className="step-head">
           <span className="badge mint">2</span>
           <h2>{t.chooseStyleTitle}</h2>
         </div>
         <p className="hint">{t.styleHint}</p>
 
+        <label className="sr-only" htmlFor="rewrite-style-select">
+          {t.chooseStyleTitle}
+        </label>
         <select
+          id="rewrite-style-select"
           className="styleselect"
           value={styleId}
           onChange={(e) => setStyleId(e.target.value)}
@@ -70,9 +74,12 @@ export default function UploadPanel() {
         </select>
         {picked && <p className="hint pick-desc">{picked.desc}</p>}
 
+        <label className="sr-only" htmlFor="rewrite-scene-select">
+          {t.sceneLabel}
+        </label>
         <select
+          id="rewrite-scene-select"
           className="styleselect"
-          aria-label={t.sceneLabel}
           value={sceneId}
           onChange={(e) => setSceneId(e.target.value as WritingSceneId)}
         >

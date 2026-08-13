@@ -27,6 +27,10 @@ export const SERVER_MESSAGES = {
     en: "Title is too long; keep it under 120 characters.",
     zh: "标题太长，请控制在 120 字以内",
   },
+  invalidTargetLength: {
+    en: "Invalid targetLength; use short, medium, or long.",
+    zh: "targetLength 无效，请使用 short、medium 或 long",
+  },
   missingFile: { en: "Missing target file (field: file).", zh: "缺少目标文件 file" },
   docNotFound: { en: "Document not found or expired.", zh: "文档不存在或已过期" },
 } satisfies Record<string, Bi>;

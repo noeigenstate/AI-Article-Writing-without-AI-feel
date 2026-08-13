@@ -6,8 +6,16 @@ import { fetchAlternatives, fetchTitles, type ArticleRenderBlockDTO, type Paragr
 import { messages } from "../../lib/i18n.js";
 
 type Selected =
-  | { kind: "sentence"; paraIndex: number; sentenceIdx: number; sentence: string; context: string; anchor: FloatingAnchor }
-  | { kind: "title"; paraIndex: number; text: string; anchor: FloatingAnchor };
+  | {
+      kind: "sentence";
+      paraIndex: number;
+      sentenceIdx: number;
+      sentence: string;
+      context: string;
+      anchor: FloatingAnchor;
+      trigger: HTMLElement;
+    }
+  | { kind: "title"; paraIndex: number; text: string; anchor: FloatingAnchor; trigger: HTMLElement };
 
 type FloatingAnchor = Pick<DOMRect, "left" | "top" | "bottom">;
 
@@ -15,7 +23,9 @@ type FloatingAnchor = Pick<DOMRect, "left" | "top" | "bottom">;
 export default function DocEditor() {
   const paragraphs = useStore((s) => s.paragraphs);
   const storedRenderBlocks = useStore((s) => s.renderBlocks);
+  const length = useStore((s) => s.length);
   const titleIndex = useStore((s) => s.titleIndex);
+  const mode = useStore((s) => s.mode);
   const aiScore = useStore((s) => s.aiScore);
   const docId = useStore((s) => s.docId)!;
   const lang = useStore((s) => s.lang);
@@ -39,6 +49,29 @@ export default function DocEditor() {
   );
   const blocks = storedRenderBlocks ?? paragraphs.map((p) => paragraphBlockFromParagraph(p));
   const compare = Boolean(aiScore);
+  const bodyLength = length && mode === "generate"
+    ? measureArticleBody(paragraphs, blocks, titleIndex, length.unit)
+    : null;
+  const lengthState = bodyLength === null || !length
+    ? null
+    : bodyLength < length.min
+      ? "short"
+      : bodyLength > length.max
+        ? "long"
+        : "in-range";
+
+  function restoreTriggerFocus(selection: Selected) {
+    setSel(null);
+    requestAnimationFrame(() => {
+      if (selection.trigger.isConnected) selection.trigger.focus();
+    });
+  }
+
+  function activateOnKeyboard(event: React.KeyboardEvent<HTMLElement>, activate: () => void) {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    activate();
+  }
 
   function renderParagraph(p: ParagraphDTO, isTitle: boolean, interactive: boolean) {
     if (isTitle) {
@@ -48,9 +81,34 @@ export default function DocEditor() {
           <span
             className={interactive ? "sentence title-pick" : "sentence readonly-sentence"}
             title={interactive ? t.clickRetitle : undefined}
+            role={interactive ? "button" : undefined}
+            tabIndex={interactive ? 0 : undefined}
+            aria-haspopup={interactive ? "dialog" : undefined}
+            aria-expanded={interactive ? sel?.kind === "title" && sel.paraIndex === p.index : undefined}
             onClick={
               interactive
-                ? (event) => setSel({ kind: "title", paraIndex: p.index, text, anchor: event.currentTarget.getBoundingClientRect() })
+                ? (event) =>
+                    setSel({
+                      kind: "title",
+                      paraIndex: p.index,
+                      text,
+                      anchor: event.currentTarget.getBoundingClientRect(),
+                      trigger: event.currentTarget,
+                    })
+                : undefined
+            }
+            onKeyDown={
+              interactive
+                ? (event) =>
+                    activateOnKeyboard(event, () =>
+                      setSel({
+                        kind: "title",
+                        paraIndex: p.index,
+                        text,
+                        anchor: event.currentTarget.getBoundingClientRect(),
+                        trigger: event.currentTarget,
+                      })
+                    )
                 : undefined
             }
           >
@@ -71,6 +129,14 @@ export default function DocEditor() {
               key={i}
               className={interactive ? "sentence" : "sentence readonly-sentence"}
               title={interactive ? t.clickRephrase : undefined}
+              role={interactive ? "button" : undefined}
+              tabIndex={interactive ? 0 : undefined}
+              aria-haspopup={interactive ? "dialog" : undefined}
+              aria-expanded={
+                interactive
+                  ? sel?.kind === "sentence" && sel.paraIndex === p.index && sel.sentenceIdx === i
+                  : undefined
+              }
               onClick={
                 interactive
                   ? (event) =>
@@ -81,7 +147,24 @@ export default function DocEditor() {
                         sentence: s,
                         context,
                         anchor: event.currentTarget.getBoundingClientRect(),
+                        trigger: event.currentTarget,
                       })
+                  : undefined
+              }
+              onKeyDown={
+                interactive
+                  ? (event) =>
+                      activateOnKeyboard(event, () =>
+                        setSel({
+                          kind: "sentence",
+                          paraIndex: p.index,
+                          sentenceIdx: i,
+                          sentence: s,
+                          context,
+                          anchor: event.currentTarget.getBoundingClientRect(),
+                          trigger: event.currentTarget,
+                        })
+                      )
                   : undefined
               }
             >
@@ -101,11 +184,7 @@ export default function DocEditor() {
         return (
           <figure className="doc-figure" key={`figure-${index}`}>
             <h2>{block.title}</h2>
-            {block.imageUrl ? (
-              <img src={block.imageUrl} alt={block.title} />
-            ) : (
-              <img src={`data:image/svg+xml;utf8,${encodeURIComponent(block.svg)}`} alt={block.title} />
-            )}
+            <img src={`data:image/svg+xml;utf8,${encodeURIComponent(block.svg)}`} alt={block.title} />
             <figcaption>
               {block.caption}
               {block.sourceUrl && (
@@ -161,6 +240,25 @@ export default function DocEditor() {
     const isBusy = Boolean(busy);
     return (
       <div className="doc-actions" aria-label={lang === "zh" ? "文档操作" : "Document actions"}>
+        {length && bodyLength !== null && lengthState && (
+          <div
+            className={`body-length body-length-${lengthState}`}
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            <span>{t.bodyLengthLabel}</span>
+            <strong>
+              {formatLength(bodyLength, lang)} {length.unit === "characters" ? t.lengthUnitCharacters : t.lengthUnitWords}
+            </strong>
+            <span className="body-length-target">
+              {t.bodyLengthTarget} {formatLength(length.min, lang)}–{formatLength(length.max, lang)}
+            </span>
+            <span className="body-length-state">
+              {lengthState === "in-range" ? t.lengthInRange : lengthState === "short" ? t.lengthTooShort : t.lengthTooLong}
+            </span>
+          </div>
+        )}
         <button className="primary doc-action-primary" disabled={isBusy} onClick={doRewrite}>
           {t.polishAll}
         </button>
@@ -201,9 +299,9 @@ export default function DocEditor() {
           loadCandidates={() => fetchAlternatives(docId, sel.context, sel.sentence, 3, lang)}
           onAdopt={(text) => {
             setSentence(sel.paraIndex, sel.sentenceIdx, text);
-            setSel(null);
+            restoreTriggerFocus(sel);
           }}
-          onClose={() => setSel(null)}
+          onClose={() => restoreTriggerFocus(sel)}
         />
       )}
 
@@ -216,9 +314,9 @@ export default function DocEditor() {
           progressTask="titleCandidates"
           onAdopt={(text) => {
             setParagraph(sel.paraIndex, text);
-            setSel(null);
+            restoreTriggerFocus(sel);
           }}
-          onClose={() => setSel(null)}
+          onClose={() => restoreTriggerFocus(sel)}
         />
       )}
     </>
@@ -243,4 +341,30 @@ function paragraphFromBlock(block: Extract<ArticleRenderBlockDTO, { type: "parag
     original: block.text,
     sentences: [block.text],
   };
+}
+
+/** Count only authored body paragraphs represented by paragraph render blocks. */
+export function measureArticleBody(
+  paragraphs: ParagraphDTO[],
+  blocks: ArticleRenderBlockDTO[],
+  titleIndex: number,
+  unit: "characters" | "words"
+): number {
+  const currentByIndex = new Map(paragraphs.map((paragraph) => [paragraph.index, paragraph]));
+  const body = blocks
+    .filter((block): block is Extract<ArticleRenderBlockDTO, { type: "paragraph" }> => block.type === "paragraph")
+    .filter((block) => block.paragraphIndex !== titleIndex && block.kind !== "heading1")
+    .map((block) => {
+      const paragraph = block.paragraphIndex === undefined ? undefined : currentByIndex.get(block.paragraphIndex);
+      return paragraph ? paragraph.sentences.join("") : block.text;
+    })
+    .join("\n")
+    .replace(/\[\d+\]/gu, "");
+
+  if (unit === "characters") return Array.from(body.replace(/\s/gu, "")).length;
+  return body.trim().match(/\S+/gu)?.length ?? 0;
+}
+
+function formatLength(value: number, lang: "en" | "zh"): string {
+  return new Intl.NumberFormat(lang === "zh" ? "zh-CN" : "en-US").format(value);
 }

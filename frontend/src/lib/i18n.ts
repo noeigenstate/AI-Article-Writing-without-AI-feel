@@ -35,6 +35,7 @@ export interface Dict {
   heroRewriteSub: string;
   heroGenerateTitle: string;
   heroGenerateSub: string;
+  researchProxyHint: string;
   editorTitle: string;
   // header
   modeRewrite: string;
@@ -67,6 +68,13 @@ export interface Dict {
   lengthRegular: string;
   lengthShort: string;
   lengthLong: string;
+  bodyLengthLabel: string;
+  bodyLengthTarget: string;
+  lengthUnitCharacters: string;
+  lengthUnitWords: string;
+  lengthInRange: string;
+  lengthTooShort: string;
+  lengthTooLong: string;
   genStep1: string;
   titlePlaceholder: string;
   generating: string;
@@ -79,11 +87,23 @@ export interface Dict {
   autoTopics: string;
   researching: string;
   researchBtn: string;
+  backToGeneratorSetup: string;
+  viewGeneratedResults: string;
+  topicResultsTitle: string;
+  topicResultsSub: string;
+  researchResultsSub: string;
+  topicResultsCount: (n: number) => string;
+  noResearchResults: string;
+  generatorOptionsSummary: string;
   enterTitleErr: string;
   currentDomain: (name: string) => string;
   generatingNote: string;
   researchHead: string;
   sourceCount: (n: number) => string;
+  researchCoverage: (domestic: number, international: number, global: number, uniqueSources: number) => string;
+  regionDomestic: string;
+  regionInternational: string;
+  regionGlobal: string;
   unavailableSources: (list: string) => string;
   generateArticleBtn: string;
   // gzh export panel (公众号排版)
@@ -162,7 +182,9 @@ const en: Dict = {
     "Rewrite AI-flavored drafts into text that reads human. Upload a Word file, polish sentence by sentence, then export.",
   heroGenerateTitle: "Source-Backed Articles",
   heroGenerateSub:
-    "Generate an article from a title or domain, grounded in live sources such as arXiv papers and news RSS.",
+    "Generate from a title or domain with automatic research across relevant web articles, public comments, papers, and news.",
+  researchProxyHint:
+    "Many sources are hosted overseas. If access is unstable on your current network, enabling an overseas proxy can make the research more complete.",
   editorTitle: "Edit & Polish",
   modeRewrite: "Rewrite Word",
   modeGenerate: "Generate article",
@@ -189,9 +211,16 @@ const en: Dict = {
   selectedSamples: (n) => `${n} sample${n > 1 ? "s" : ""} selected`,
   noSamples: "None chosen (optional, .docx / .txt)",
   uploadAndParse: "Upload & parse",
-  lengthRegular: "Regular 850+ words",
-  lengthShort: "Short 350-500 words",
-  lengthLong: "Long 2200+ words",
+  lengthRegular: "Regular 850–1100 words",
+  lengthShort: "Short 350–500 words",
+  lengthLong: "Long 2200–2800 words",
+  bodyLengthLabel: "Body",
+  bodyLengthTarget: "target",
+  lengthUnitCharacters: "characters",
+  lengthUnitWords: "words",
+  lengthInRange: "On target",
+  lengthTooShort: "Short",
+  lengthTooLong: "Long",
   genStep1: "Enter a title or pick a domain",
   titlePlaceholder: "Type a title; AI picks the domain and writes the article",
   generating: "Generating…",
@@ -203,12 +232,25 @@ const en: Dict = {
   defaultTone: "Default tone",
   autoTopics: "Auto-generate topics",
   researching: "Searching…",
-  researchBtn: "Live sources",
+  researchBtn: "Preview sources",
+  backToGeneratorSetup: "Back to generation setup",
+  viewGeneratedResults: "View generated results",
+  topicResultsTitle: "Choose a title direction",
+  topicResultsSub: "Review the proposed angles and their source material, then choose one to generate the full article.",
+  researchResultsSub: "Review the source ledger, then return to adjust the domain or generate title directions.",
+  topicResultsCount: (n) => `${n} title direction${n === 1 ? "" : "s"}`,
+  noResearchResults: "No usable sources were returned. Go back and try a more specific domain or enable an overseas proxy.",
+  generatorOptionsSummary: "Current article settings",
   enterTitleErr: "Please enter an article title",
   currentDomain: (name) => `Current domain: ${name}`,
-  generatingNote: "Writing the article — usually 30-90s; you'll land in the editor when it's done.",
-  researchHead: "Live sources",
+  generatingNote: "Searching the web and writing — usually 30-90s; you'll land in the editor when it's done.",
+  researchHead: "Sources found",
   sourceCount: (n) => `${n} source${n > 1 ? "s" : ""}`,
+  researchCoverage: (domestic, international, global, uniqueSources) =>
+    `Domestic ${domestic} · International ${international} · Open web ${global} · ${uniqueSources} publisher${uniqueSources === 1 ? "" : "s"}`,
+  regionDomestic: "domestic",
+  regionInternational: "international",
+  regionGlobal: "global",
   unavailableSources: (list) => `Some sources are unavailable: ${list}`,
   generateArticleBtn: "Generate article",
   gzhPanelTitle: "WeChat formatting",
@@ -321,7 +363,8 @@ const zh: Dict = {
   heroRewriteTitle: "AI 拟人化改写",
   heroRewriteSub: "把 AI 味很重的稿子改写成更像真人写的文字。上传 Word，逐句润色，一键导出。",
   heroGenerateTitle: "AI 文章生成",
-  heroGenerateSub: "按标题或领域生成文章，自动引用 arXiv 论文与新闻 RSS 等实时资料。",
+  heroGenerateSub: "按标题或领域生成文章，默认检索相关网页文章、公开评论、论文与新闻资料。",
+  researchProxyHint: "较多资料来自境外站点；当前网络访问不稳时，开启境外代理会让检索更完整。",
   editorTitle: "编辑与润色",
   modeRewrite: "改写 Word",
   modeGenerate: "生成文章",
@@ -348,9 +391,16 @@ const zh: Dict = {
   selectedSamples: (n) => `已选 ${n} 篇范文`,
   noSamples: "未选择（可选，.docx / .txt）",
   uploadAndParse: "上传并解析",
-  lengthRegular: "常规 1000字+",
-  lengthShort: "短文 500字",
-  lengthLong: "长文 3000字+",
+  lengthRegular: "常规 1000–1300 字",
+  lengthShort: "短文 450–650 字",
+  lengthLong: "长文 3000–3800 字",
+  bodyLengthLabel: "正文",
+  bodyLengthTarget: "目标",
+  lengthUnitCharacters: "字",
+  lengthUnitWords: "词",
+  lengthInRange: "达标",
+  lengthTooShort: "偏短",
+  lengthTooLong: "偏长",
   genStep1: "输入标题或选择领域",
   titlePlaceholder: "输入标题，AI 自动判断领域并生成文章",
   generating: "生成中…",
@@ -362,12 +412,25 @@ const zh: Dict = {
   defaultTone: "默认口吻",
   autoTopics: "自动生成选题",
   researching: "检索中…",
-  researchBtn: "前沿资料",
+  researchBtn: "预览检索资料",
+  backToGeneratorSetup: "返回生成设置",
+  viewGeneratedResults: "查看已生成结果",
+  topicResultsTitle: "选择一个标题方向",
+  topicResultsSub: "先查看标题角度和对应资料，再选择其中一个生成完整文章。",
+  researchResultsSub: "先检查资料清单；需要调整领域或继续生成标题时，可以返回上一页。",
+  topicResultsCount: (n) => `${n} 个标题方向`,
+  noResearchResults: "暂未取得可用资料。请返回后缩小领域范围，或开启境外代理再试。",
+  generatorOptionsSummary: "当前文章设置",
   enterTitleErr: "请输入文章标题",
   currentDomain: (name) => `当前领域：${name}`,
-  generatingNote: "正在生成文章，通常需要 30-90 秒，完成后会自动进入编辑页。",
-  researchHead: "前沿资料",
+  generatingNote: "正在搜索网页资料并生成文章，通常需要 30-90 秒，完成后会自动进入编辑页。",
+  researchHead: "已检索资料",
   sourceCount: (n) => `${n} 条来源`,
+  researchCoverage: (domestic, international, global, uniqueSources) =>
+    `国内 ${domestic} · 国际 ${international} · 全球网页 ${global} · ${uniqueSources} 家来源`,
+  regionDomestic: "国内",
+  regionInternational: "国际",
+  regionGlobal: "全球",
   unavailableSources: (list) => `部分来源暂不可用：${list}`,
   generateArticleBtn: "一键生成文章",
   gzhPanelTitle: "公众号排版",

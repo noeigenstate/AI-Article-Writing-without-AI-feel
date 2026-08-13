@@ -362,7 +362,402 @@ function buildChunkPrompt(doc: GzhArticleStructure, chunk: GzhChunk, author: str
   ].join("\n");
 }
 
-/** 剥掉模型可能带上的围栏/文档外壳/解释文字，只留 HTML 片段。 */
+const SAFE_GZH_TAGS = new Set([
+  "a",
+  "br",
+  "code",
+  "em",
+  "figcaption",
+  "figure",
+  "h3",
+  "h4",
+  "hr",
+  "img",
+  "li",
+  "p",
+  "section",
+  "span",
+  "strong",
+  "table",
+  "tbody",
+  "td",
+  "th",
+  "thead",
+  "tr",
+  "u",
+  "ul",
+  // A deliberately small SVG subset used by the bundled local themes.
+  "svg",
+  "circle",
+  "ellipse",
+  "line",
+  "path",
+  "polygon",
+  "polyline",
+  "rect",
+  "text",
+  "tspan",
+]);
+
+const VOID_GZH_TAGS = new Set(["br", "hr", "img"]);
+const SVG_GZH_TAGS = new Set([
+  "svg",
+  "circle",
+  "ellipse",
+  "line",
+  "path",
+  "polygon",
+  "polyline",
+  "rect",
+  "text",
+  "tspan",
+]);
+const SAFE_GLOBAL_ATTRIBUTES = new Set(["style", "role", "aria-hidden", "aria-label"]);
+const SAFE_SVG_ATTRIBUTES = new Set([
+  "cx",
+  "cy",
+  "d",
+  "fill",
+  "font-family",
+  "font-size",
+  "font-weight",
+  "height",
+  "letter-spacing",
+  "points",
+  "r",
+  "rx",
+  "ry",
+  "stroke",
+  "stroke-linecap",
+  "stroke-linejoin",
+  "stroke-width",
+  "text-anchor",
+  "viewbox",
+  "width",
+  "x",
+  "x1",
+  "x2",
+  "y",
+  "y1",
+  "y2",
+]);
+const SAFE_STYLE_PROPERTIES = new Set([
+  "align-items",
+  "align-self",
+  "background",
+  "background-color",
+  "border",
+  "border-bottom",
+  "border-bottom-color",
+  "border-bottom-left-radius",
+  "border-bottom-right-radius",
+  "border-bottom-style",
+  "border-bottom-width",
+  "border-collapse",
+  "border-color",
+  "border-left",
+  "border-left-color",
+  "border-left-style",
+  "border-left-width",
+  "border-radius",
+  "border-right",
+  "border-right-color",
+  "border-right-style",
+  "border-right-width",
+  "border-style",
+  "border-top",
+  "border-top-color",
+  "border-top-left-radius",
+  "border-top-right-radius",
+  "border-top-style",
+  "border-top-width",
+  "border-width",
+  "box-shadow",
+  "box-sizing",
+  "color",
+  "cursor",
+  "display",
+  "flex",
+  "flex-basis",
+  "flex-direction",
+  "flex-grow",
+  "flex-shrink",
+  "flex-wrap",
+  "font-family",
+  "font-size",
+  "font-style",
+  "font-variant-numeric",
+  "font-weight",
+  "gap",
+  "height",
+  "justify-content",
+  "letter-spacing",
+  "line-height",
+  "list-style-type",
+  "list-style-position",
+  "margin",
+  "margin-bottom",
+  "margin-left",
+  "margin-right",
+  "margin-top",
+  "max-height",
+  "max-width",
+  "min-height",
+  "min-width",
+  "opacity",
+  "overflow",
+  "overflow-wrap",
+  "overflow-x",
+  "overflow-y",
+  "padding",
+  "padding-bottom",
+  "padding-left",
+  "padding-right",
+  "padding-top",
+  "position",
+  "text-align",
+  "text-decoration",
+  "text-indent",
+  "text-overflow",
+  "text-shadow",
+  "text-transform",
+  "transform",
+  "transform-origin",
+  "vertical-align",
+  "-webkit-overflow-scrolling",
+  "white-space",
+  "width",
+  "word-break",
+  "word-spacing",
+  "writing-mode",
+]);
+
+/**
+ * Deterministically reduce model-authored HTML to the subset used by the
+ * bundled WeChat themes. Unknown elements/attributes are dropped; URLs and
+ * CSS are independently checked so prompt injection cannot create executable
+ * HTML in the preview or downloaded file.
+ */
+export function sanitizeGzhHtml(raw: string): string {
+  const out: string[] = [];
+  let cursor = 0;
+
+  while (cursor < raw.length) {
+    const tagStart = raw.indexOf("<", cursor);
+    if (tagStart < 0) {
+      out.push(raw.slice(cursor).replace(/\0/g, ""));
+      break;
+    }
+    out.push(raw.slice(cursor, tagStart).replace(/\0/g, ""));
+
+    if (raw.startsWith("<!--", tagStart)) {
+      const commentEnd = raw.indexOf("-->", tagStart + 4);
+      cursor = commentEnd < 0 ? raw.length : commentEnd + 3;
+      continue;
+    }
+
+    const tagEnd = findHtmlTagEnd(raw, tagStart + 1);
+    if (tagEnd < 0) {
+      out.push("&lt;");
+      cursor = tagStart + 1;
+      continue;
+    }
+
+    const token = raw.slice(tagStart + 1, tagEnd);
+    const closing = token.match(/^\s*\/\s*([a-zA-Z][\w-]*)\s*$/);
+    if (closing) {
+      const tag = closing[1].toLowerCase();
+      if (SAFE_GZH_TAGS.has(tag) && !VOID_GZH_TAGS.has(tag)) out.push(`</${tag}>`);
+      cursor = tagEnd + 1;
+      continue;
+    }
+
+    const opening = token.match(/^\s*([a-zA-Z][\w-]*)([\s\S]*)$/);
+    if (!opening) {
+      out.push(escapeHtmlToken(raw.slice(tagStart, tagEnd + 1)));
+      cursor = tagEnd + 1;
+      continue;
+    }
+
+    const tag = opening[1].toLowerCase();
+    if (SAFE_GZH_TAGS.has(tag)) {
+      const selfClosing = /\/\s*$/.test(opening[2]);
+      const attributes = sanitizeGzhAttributes(tag, opening[2].replace(/\/\s*$/, ""));
+      const suffix = selfClosing && SVG_GZH_TAGS.has(tag) ? " /" : "";
+      out.push(`<${tag}${attributes}${suffix}>`);
+    }
+    cursor = tagEnd + 1;
+  }
+
+  return out.join("").trim();
+}
+
+function findHtmlTagEnd(raw: string, from: number): number {
+  let quote = "";
+  for (let i = from; i < raw.length; i += 1) {
+    const char = raw[i];
+    if (quote) {
+      if (char === quote) quote = "";
+    } else if (char === '"' || char === "'") {
+      quote = char;
+    } else if (char === ">") {
+      return i;
+    }
+  }
+  return -1;
+}
+
+function sanitizeGzhAttributes(tag: string, raw: string): string {
+  const attributes: string[] = [];
+  const seen = new Set<string>();
+  let cursor = 0;
+
+  while (cursor < raw.length) {
+    while (/\s/.test(raw[cursor] ?? "")) cursor += 1;
+    if (cursor >= raw.length) break;
+
+    const nameMatch = raw.slice(cursor).match(/^([^\s=/>]+)/);
+    if (!nameMatch) {
+      cursor += 1;
+      continue;
+    }
+    const originalName = nameMatch[1];
+    const name = originalName.toLowerCase();
+    cursor += originalName.length;
+    while (/\s/.test(raw[cursor] ?? "")) cursor += 1;
+
+    let value = "";
+    if (raw[cursor] === "=") {
+      cursor += 1;
+      while (/\s/.test(raw[cursor] ?? "")) cursor += 1;
+      const quote = raw[cursor];
+      if (quote === '"' || quote === "'") {
+        cursor += 1;
+        const end = raw.indexOf(quote, cursor);
+        if (end < 0) break;
+        value = raw.slice(cursor, end);
+        cursor = end + 1;
+      } else {
+        const valueMatch = raw.slice(cursor).match(/^[^\s>]+/);
+        value = valueMatch?.[0] ?? "";
+        cursor += value.length || 1;
+      }
+    }
+
+    if (seen.has(name)) continue;
+    const safe = sanitizeGzhAttribute(tag, name, value);
+    if (safe === undefined) continue;
+    seen.add(name);
+    const outputName = name === "viewbox" ? "viewBox" : name;
+    attributes.push(`${outputName}="${escapeHtmlAttribute(safe)}"`);
+  }
+  return attributes.length ? ` ${attributes.join(" ")}` : "";
+}
+
+function sanitizeGzhAttribute(tag: string, name: string, value: string): string | undefined {
+  if (name.startsWith("on") || name === "class" || name === "id") return undefined;
+  if (name === "style") return sanitizeInlineStyle(value) || undefined;
+  if (tag === "span" && (name === "leaf" || name === "nodeleaf")) return "";
+  if (tag === "section" && name === "mp-style-type") return value.slice(0, 80);
+  if (SAFE_GLOBAL_ATTRIBUTES.has(name)) return value.slice(0, 500);
+  // Model-authored image URLs are never fetched in the formatter. Removing
+  // `src` prevents generated previews/downloads from becoming tracking or
+  // DNS-rebinding request gadgets; the application supplies no trusted image
+  // URL through this model-output channel.
+  if (tag === "img" && name === "src") return undefined;
+  if (tag === "img" && (name === "alt" || name === "width" || name === "height")) return value.slice(0, 500);
+  if (tag === "a" && name === "href") return sanitizeUrl(value, true);
+  if (tag === "a" && name === "title") return value.slice(0, 500);
+  if (SVG_GZH_TAGS.has(tag) && SAFE_SVG_ATTRIBUTES.has(name)) {
+    if ((name === "fill" || name === "stroke") && isDangerousCss(value)) return undefined;
+    return value.slice(0, 2_000);
+  }
+  return undefined;
+}
+
+function sanitizeUrl(value: string, allowContactProtocols: boolean): string | undefined {
+  const decoded = decodeHtmlForSecurity(value).trim();
+  const compact = decoded.replace(/[\u0000-\u0020\u007f-\u009f]/g, "");
+  if (!compact || compact.startsWith("//")) return undefined;
+  if (compact.startsWith("#") || compact.startsWith("/") || compact.startsWith("./") || compact.startsWith("../")) {
+    return decoded.slice(0, 2_000);
+  }
+  const scheme = compact.match(/^([a-z][a-z0-9+.-]*):/i)?.[1]?.toLowerCase();
+  if (!scheme) return undefined;
+  const allowed = allowContactProtocols ? new Set(["http", "https", "mailto", "tel"]) : new Set(["http", "https"]);
+  return allowed.has(scheme) ? decoded.slice(0, 2_000) : undefined;
+}
+
+function sanitizeInlineStyle(style: string): string {
+  const safe: string[] = [];
+  // Decode entities before declaration splitting: otherwise `&#x75;rl(...)`
+  // would be split at the entity semicolon before the URL check sees it.
+  for (const declaration of decodeHtmlForSecurity(style).split(";")) {
+    const separator = declaration.indexOf(":");
+    if (separator <= 0) continue;
+    const property = declaration.slice(0, separator).trim().toLowerCase();
+    const value = declaration.slice(separator + 1).trim();
+    if (!SAFE_STYLE_PROPERTIES.has(property) || !value || isDangerousCss(value)) continue;
+    if (property === "position" && value.toLowerCase() !== "relative") continue;
+    if (property === "display" && !/^(?:block|inline|inline-block|flex|inline-flex|table|table-row|table-cell)$/i.test(value)) {
+      continue;
+    }
+    safe.push(`${property}:${value}`);
+  }
+  return safe.join(";");
+}
+
+function isDangerousCss(value: string): boolean {
+  const normalized = decodeCssEscapes(decodeHtmlForSecurity(value))
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .toLowerCase();
+  return /(?:url\s*\(|image-set\s*\(|expression\s*\(|@import|(?:https?|ftps?|wss?|javascript|vbscript|data|file|behavior)\s*:|-moz-binding)/i.test(
+    normalized
+  );
+}
+
+function decodeCssEscapes(value: string): string {
+  return value
+    .replace(/\\([0-9a-f]{1,6})\s?/gi, (_match, hex: string) => String.fromCodePoint(Number.parseInt(hex, 16)))
+    .replace(/\\([^\r\n])/g, "$1");
+}
+
+function decodeHtmlForSecurity(value: string): string {
+  let decoded = value;
+  for (let pass = 0; pass < 3; pass += 1) {
+    const next = decoded
+      .replace(/&#x([0-9a-f]+);?/gi, (_match, hex: string) => safeCodePoint(hex, 16))
+      .replace(/&#([0-9]+);?/g, (_match, decimal: string) => safeCodePoint(decimal, 10))
+      .replace(/&(colon|tab|newline|amp);/gi, (_match, entity: string) => {
+        const named: Record<string, string> = { colon: ":", tab: "\t", newline: "\n", amp: "&" };
+        return named[entity.toLowerCase()];
+      });
+    if (next === decoded) break;
+    decoded = next;
+  }
+  return decoded;
+}
+
+function safeCodePoint(value: string, radix: number): string {
+  const point = Number.parseInt(value, radix);
+  return Number.isSafeInteger(point) && point >= 0 && point <= 0x10ffff ? String.fromCodePoint(point) : "";
+}
+
+function escapeHtmlAttribute(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function escapeHtmlToken(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/** 剥掉模型可能带上的围栏/文档外壳/解释文字，再执行 HTML 白名单净化。 */
 function sanitizeChunkHtml(raw: string): string {
   let s = raw.trim();
   s = s.replace(/^```(?:html)?\s*/i, "").replace(/\s*```$/, "").trim();
@@ -371,7 +766,7 @@ function sanitizeChunkHtml(raw: string): string {
   const lastIdx = s.lastIndexOf(">");
   if (first > 0) s = s.slice(first);
   if (lastIdx >= 0 && lastIdx < s.length - 1) s = s.slice(0, lastIdx + 1);
-  return s.trim();
+  return sanitizeGzhHtml(s.trim());
 }
 
 /** 从主题库"组件 1 全局容器"取容器首尾；取不到则用中性兜底容器。 */
@@ -443,9 +838,11 @@ export async function formatGzhArticle(input: GzhFormatInput): Promise<GzhFormat
   }
 
   const container = extractContainer(theme);
-  const body = `${container.open}\n${rendered.join("\n")}\n${container.close}`
-    .replace(/<!--[\s\S]*?-->/g, "")
-    .replace(/\n{3,}/g, "\n\n");
+  const body = sanitizeGzhHtml(
+    `${container.open}\n${rendered.join("\n")}\n${container.close}`
+      .replace(/<!--[\s\S]*?-->/g, "")
+      .replace(/\n{3,}/g, "\n\n")
+  );
   const validation = validateGzhHtml(body);
   return {
     html: body,

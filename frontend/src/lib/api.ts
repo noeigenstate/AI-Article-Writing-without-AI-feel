@@ -14,6 +14,19 @@ export interface ParagraphDTO {
 
 const BASE = "/api";
 
+const LOCAL_BACKEND_UNAVAILABLE: Record<Lang, string> = {
+  en: 'Cannot reach the local backend. Run run.bat again, wait for "Speak Plainly is ready", then retry.',
+  zh: "无法连接本地后端。请重新运行 run.bat，等命令行显示“Speak Plainly is ready”后再试。",
+};
+
+async function apiFetch(input: RequestInfo | URL, init: RequestInit | undefined, lang: Lang): Promise<Response> {
+  try {
+    return await fetch(input, init);
+  } catch {
+    throw new Error(LOCAL_BACKEND_UNAVAILABLE[lang]);
+  }
+}
+
 async function apiError(res: Response, fallback: string): Promise<Error> {
   const contentType = res.headers.get("content-type") ?? "";
   try {
@@ -57,10 +70,12 @@ export interface TopicOptionDTO {
 
 export interface ResearchItemDTO {
   id: string;
-  sourceKind: "paper" | "news";
+  sourceKind: "paper" | "news" | "article" | "comment";
+  region: "domestic" | "international" | "global";
   sourceName: string;
   title: string;
   summary: string;
+  excerpt?: string;
   url: string;
   imageUrl?: string;
   publishedAt: string;
@@ -72,15 +87,32 @@ export interface ResearchBundleDTO {
   generatedAt: string;
   items: ResearchItemDTO[];
   unavailableSources: string[];
+  coverage: {
+    domestic: number;
+    international: number;
+    global: number;
+    uniqueSources: number;
+  };
   context?: string;
 }
 
 export type TargetLength = "short" | "medium" | "long";
+export type ArticleLengthUnit = "characters" | "words";
+
+export interface ArticleLengthDTO {
+  tier: TargetLength;
+  unit: ArticleLengthUnit;
+  actual: number;
+  min: number;
+  max: number;
+  inRange: boolean;
+}
+
 export type WritingSceneId = "general" | "wechat" | "business" | "academic" | "official" | "social" | "technical";
 
 export type ArticleRenderBlockDTO =
   | { type: "paragraph"; kind: string; text: string; paragraphIndex?: number }
-  | { type: "figure"; title: string; caption: string; svg: string; imageUrl?: string; sourceName?: string; sourceUrl?: string }
+  | { type: "figure"; title: string; caption: string; svg: string; sourceName?: string; sourceUrl?: string }
   | { type: "table"; title: string; columns: string[]; rows: string[][]; note?: string }
   | { type: "references"; title: string; items: string[] };
 
@@ -89,6 +121,7 @@ export interface GeneratedArticleResponseDTO {
   styleSummary: string;
   titleIndex: number;
   paragraphs: ParagraphDTO[];
+  length?: ArticleLengthDTO;
   renderBlocks?: ArticleRenderBlockDTO[];
   research?: ResearchBundleDTO;
   domain?: ArticleDomainDTO;
@@ -101,36 +134,44 @@ export interface GeneratedArticleResponseDTO {
 
 /** Fetch the built-in writing styles (empty array on failure). */
 export async function fetchStyles(lang: Lang) {
-  const res = await fetch(`${BASE}/styles?lang=${lang}`);
-  if (!res.ok) return [] as StyleDTO[];
-  return (await res.json()).styles as StyleDTO[];
+  try {
+    const res = await apiFetch(`${BASE}/styles?lang=${lang}`, undefined, lang);
+    if (!res.ok) return [] as StyleDTO[];
+    return (await res.json()).styles as StyleDTO[];
+  } catch {
+    return [] as StyleDTO[];
+  }
 }
 
 /** Fetch the available article domains (empty array on failure). */
 export async function fetchArticleDomains(lang: Lang) {
-  const res = await fetch(`${BASE}/article/domains?lang=${lang}`);
-  if (!res.ok) return [] as ArticleDomainDTO[];
-  return (await res.json()).domains as ArticleDomainDTO[];
+  try {
+    const res = await apiFetch(`${BASE}/article/domains?lang=${lang}`, undefined, lang);
+    if (!res.ok) return [] as ArticleDomainDTO[];
+    return (await res.json()).domains as ArticleDomainDTO[];
+  } catch {
+    return [] as ArticleDomainDTO[];
+  }
 }
 
 /** Preview aggregated live sources for a domain/query. */
 export async function previewResearch(domainId: string, customDomain = "", query = "", lang: Lang = "en") {
-  const res = await fetch(`${BASE}/research/preview`, {
+  const res = await apiFetch(`${BASE}/research/preview`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ domainId, customDomain, query, lang }),
-  });
+  }, lang);
   if (!res.ok) throw await apiError(res, "Failed to fetch live sources");
   return res.json() as Promise<ResearchBundleDTO>;
 }
 
 /** Generate topic options for a domain, with the research bundle used. */
 export async function fetchArticleTopics(domainId: string, customDomain = "", n = 6, lang: Lang = "en") {
-  const res = await fetch(`${BASE}/article/topics`, {
+  const res = await apiFetch(`${BASE}/article/topics`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ domainId, customDomain, n, lang }),
-  });
+  }, lang);
   if (!res.ok) throw await apiError(res, "Failed to generate topics");
   return res.json() as Promise<{
     topics: TopicOptionDTO[];
@@ -148,11 +189,11 @@ export async function generateArticle(
   targetLength: TargetLength,
   lang: Lang = "en"
 ) {
-  const res = await fetch(`${BASE}/article/generate`, {
+  const res = await apiFetch(`${BASE}/article/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ domainId, customDomain, topic, styleId, sceneId, targetLength, lang }),
-  });
+  }, lang);
   if (!res.ok) throw await apiError(res, "Failed to generate article");
   return res.json() as Promise<GeneratedArticleResponseDTO>;
 }
@@ -165,11 +206,11 @@ export async function generateArticleFromTitle(
   targetLength: TargetLength,
   lang: Lang = "en"
 ) {
-  const res = await fetch(`${BASE}/article/generate-from-title`, {
+  const res = await apiFetch(`${BASE}/article/generate-from-title`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ title, styleId, sceneId, targetLength, lang }),
-  });
+  }, lang);
   if (!res.ok) throw await apiError(res, "Failed to generate article from title");
   return res.json() as Promise<GeneratedArticleResponseDTO>;
 }
@@ -182,7 +223,7 @@ export async function uploadFiles(target: File, references: File[], styleId = ""
   if (styleId) fd.append("styleId", styleId);
   fd.append("sceneId", sceneId);
   fd.append("lang", lang);
-  const res = await fetch(`${BASE}/upload`, { method: "POST", body: fd });
+  const res = await apiFetch(`${BASE}/upload`, { method: "POST", body: fd }, lang);
   if (!res.ok) throw await apiError(res, "Upload failed");
   return res.json() as Promise<{
     docId: string;
@@ -226,44 +267,44 @@ export interface DiagnosticReportDTO extends AiScoreDTO {
 
 /** De-AI the whole document; returns paragraphs and before/after scores. */
 export async function rewriteDoc(docId: string, lang: Lang = "en") {
-  const res = await fetch(`${BASE}/rewrite`, {
+  const res = await apiFetch(`${BASE}/rewrite`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ docId, lang }),
-  });
+  }, lang);
   if (!res.ok) throw await apiError(res, "Rewrite failed");
   return res.json() as Promise<{ paragraphs: ParagraphDTO[]; score?: { before: DiagnosticReportDTO; after: DiagnosticReportDTO } }>;
 }
 
 /** Score text for human-likeness via the local (no-model) backend endpoint. */
 export async function scoreText(text: string, lang: Lang = "en") {
-  const res = await fetch(`${BASE}/score`, {
+  const res = await apiFetch(`${BASE}/score`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text, lang }),
-  });
+  }, lang);
   if (!res.ok) throw await apiError(res, "Score failed");
   return res.json() as Promise<AiScoreDTO>;
 }
 
 /** Return an explainable local diagnosis without rewriting the document. */
 export async function diagnoseText(text: string, lang: Lang = "en") {
-  const res = await fetch(`${BASE}/diagnose`, {
+  const res = await apiFetch(`${BASE}/diagnose`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text, lang }),
-  });
+  }, lang);
   if (!res.ok) throw await apiError(res, "Diagnosis failed");
   return res.json() as Promise<DiagnosticReportDTO>;
 }
 
 /** Fetch N title candidates for a document (empty array on failure). */
 export async function fetchTitles(docId: string, n = 3, lang: Lang = "en") {
-  const res = await fetch(`${BASE}/title`, {
+  const res = await apiFetch(`${BASE}/title`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ docId, n, lang }),
-  });
+  }, lang);
   if (!res.ok) throw await apiError(res, "Failed to generate titles");
   return (await res.json()).titles as string[];
 }
@@ -276,11 +317,11 @@ export async function fetchAlternatives(
   n = 3,
   lang: Lang = "en"
 ) {
-  const res = await fetch(`${BASE}/sentence/alternatives`, {
+  const res = await apiFetch(`${BASE}/sentence/alternatives`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ docId, context, sentence, n, lang }),
-  });
+  }, lang);
   if (!res.ok) throw await apiError(res, "Failed to generate alternatives");
   return (await res.json()).alternatives as string[];
 }
@@ -305,29 +346,33 @@ export interface GzhFormatResponseDTO {
 
 /** Fetch the registered 公众号 formatting themes (empty array on failure). */
 export async function fetchGzhThemes(lang: Lang) {
-  const res = await fetch(`${BASE}/gzh/themes?lang=${lang}`);
-  if (!res.ok) return [] as GzhThemeDTO[];
-  return (await res.json()).themes as GzhThemeDTO[];
+  try {
+    const res = await apiFetch(`${BASE}/gzh/themes?lang=${lang}`, undefined, lang);
+    if (!res.ok) return [] as GzhThemeDTO[];
+    return (await res.json()).themes as GzhThemeDTO[];
+  } catch {
+    return [] as GzhThemeDTO[];
+  }
 }
 
 /** Format a Markdown article into paste-ready 公众号 HTML. */
 export async function formatGzhArticle(markdown: string, themeId: string, author: string, lang: Lang = "en") {
-  const res = await fetch(`${BASE}/gzh/format`, {
+  const res = await apiFetch(`${BASE}/gzh/format`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ markdown, themeId, author, lang }),
-  });
+  }, lang);
   if (!res.ok) throw await apiError(res, "Formatting failed");
   return res.json() as Promise<GzhFormatResponseDTO>;
 }
 
 /** Export the edited document to docx and trigger a browser download. */
-export async function exportDoc(docId: string, texts: Record<number, string>) {
-  const res = await fetch(`${BASE}/export`, {
+export async function exportDoc(docId: string, texts: Record<number, string>, lang: Lang = "en") {
+  const res = await apiFetch(`${BASE}/export`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ docId, texts }),
-  });
+  }, lang);
   if (!res.ok) throw await apiError(res, "Export failed");
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);

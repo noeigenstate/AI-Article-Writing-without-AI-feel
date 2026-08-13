@@ -1,9 +1,23 @@
 import { chat, type ChatOptions } from "./llm.js";
 import type { DocxBlock, ParaKind } from "./docx.js";
 import type { ResearchItem } from "./research/types.js";
-import { articleDraftPrompt, articleLengthFixPrompt, articleTopicsPrompt } from "../prompts/article.prompts.js";
+import { fetchSafeImageBinary } from "./research/images.js";
+import {
+  articleCitationFixPrompt,
+  articleDraftPrompt,
+  articleLengthFixPrompt,
+  articleTopicsPrompt,
+} from "../prompts/article.prompts.js";
 import { escapeSvg, shortDate, slug, stringField, truncate } from "../lib/text.js";
 import { parseJsonWithRepair } from "../lib/json.js";
+import {
+  articleLengthDistance,
+  countArticleBody,
+  getArticleLengthSpec,
+  measureArticleLength,
+  type ArticleLengthMetadata,
+  type ArticleLengthTier,
+} from "./articleLength.js";
 import {
   ARTICLE_LABELS,
   tr,
@@ -27,6 +41,8 @@ export interface TopicOption {
 export interface GeneratedArticle {
   title: string;
   paragraphs: string[];
+  /** Body-only length measurement for the requested language/tier. */
+  length?: ArticleLengthMetadata;
   references?: ArticleReference[];
   /** Lead figure shown after the opening paragraph. */
   figure?: ArticleFigure;
@@ -57,7 +73,7 @@ export interface ArticleDomainMatch {
 
 export type ArticleRenderBlock =
   | { type: "paragraph"; kind: ParaKind; text: string; paragraphIndex?: number }
-  | { type: "figure"; title: string; caption: string; svg: string; imageUrl?: string; sourceName?: string; sourceUrl?: string }
+  | { type: "figure"; title: string; caption: string; svg: string; sourceName?: string; sourceUrl?: string }
   | { type: "table"; title: string; columns: string[]; rows: string[][]; note?: string }
   | { type: "references"; title: string; items: string[] };
 
@@ -65,15 +81,24 @@ export interface GenerateTopicOptionsInput {
   domain: ArticleDomain;
   n?: number;
   researchContext?: string;
+  researchCoverage?: ResearchCoverageSummary;
   lang?: Lang;
+}
+
+export interface ResearchCoverageSummary {
+  domestic: number;
+  international: number;
+  global: number;
+  uniqueSources: number;
 }
 
 export interface GenerateArticleInput {
   domainName: string;
   topic: TopicOption | string;
   styleSummary?: string;
-  targetLength?: "short" | "medium" | "long";
+  targetLength?: ArticleLengthTier;
   researchContext?: string;
+  researchCoverage?: ResearchCoverageSummary;
   lang?: Lang;
 }
 
@@ -242,7 +267,14 @@ export async function generateTopicOptions(
   const n = options.n ?? 6;
   const lang: Lang = "lang" in options && options.lang ? options.lang : "en";
   const raw = await ask(
-    articleTopicsPrompt(options.domain.name, options.domain.desc, n, options.researchContext, lang),
+    articleTopicsPrompt(
+      options.domain.name,
+      options.domain.desc,
+      n,
+      options.researchContext,
+      lang,
+      options.researchCoverage
+    ),
     { temperature: 0.85 }
   );
   const parsed = await parseJsonWithRepair<unknown>(raw, ask, "topics JSON array");
@@ -261,50 +293,22 @@ export async function generateTopicOptions(
 }
 
 /**
- * Acceptance bands per length tier, wider than the prompt's ideal range so we
- * only trigger a corrective pass on clear misses. zh counts characters, en words.
- */
-const LENGTH_BANDS: Record<Lang, Record<NonNullable<GenerateArticleInput["targetLength"]>, { min: number; max: number }>> = {
-  zh: {
-    short: { min: 380, max: 800 },
-    medium: { min: 850, max: 1600 },
-    long: { min: 2600, max: 4600 },
-  },
-  en: {
-    short: { min: 250, max: 650 },
-    medium: { min: 700, max: 1400 },
-    long: { min: 1800, max: 3400 },
-  },
-};
-
-/**
  * Output caps per length tier. Without an explicit cap the provider default
  * (often ~4k tokens) silently truncates long drafts, and the JSON-repair pass
  * then "recovers" a much shorter article.
  */
-const DRAFT_MAX_TOKENS: Record<NonNullable<GenerateArticleInput["targetLength"]>, number> = {
+const DRAFT_MAX_TOKENS: Record<ArticleLengthTier, number> = {
   short: 2500,
   medium: 5000,
   long: 8192,
 };
 
-/** How many corrective passes to attempt when a draft misses its length band. */
+/** How many corrective passes to attempt before an off-target draft is rejected. */
 const MAX_LENGTH_FIX_PASSES = 2;
 
-/** Measure article body length: characters for zh, whitespace-separated words for en. */
+/** Measure body-only length using the shared language-specific counting rule. */
 export function articleBodyLength(article: GeneratedArticle, lang: Lang): number {
-  const text = [article.title, ...article.paragraphs].join("\n");
-  if (lang === "zh") {
-    return text.replace(/\s+/g, "").length;
-  }
-  return text.trim().match(/\S+/g)?.length ?? 0;
-}
-
-/** Distance from a length to a band; 0 when inside the band. */
-function distanceToBand(length: number, band: { min: number; max: number }): number {
-  if (length < band.min) return band.min - length;
-  if (length > band.max) return length - band.max;
-  return 0;
+  return countArticleBody(article.paragraphs, lang);
 }
 
 /**
@@ -312,7 +316,9 @@ function distanceToBand(length: number, band: { min: number; max: number }): num
  *
  * The draft is checked against the target-length band; on a clear miss the
  * model is asked to expand/condense its own draft (up to two passes), and a
- * pass is kept only when it moves the length toward the band.
+ * pass is kept only when it moves the length toward the band. A successful
+ * return is guaranteed to be inside the requested band; persistent misses are
+ * rejected instead of being presented as completed work.
  *
  * @param input Domain, topic, style, length, research context, and language.
  * @param ask Chat function (injectable for testing).
@@ -333,22 +339,92 @@ export async function generateArticleDraft(
     throw new Error("The model did not return a usable article JSON.");
   }
 
-  const band = LENGTH_BANDS[lang][targetLength];
+  const spec = getArticleLengthSpec(lang, targetLength);
   for (let pass = 0; pass < MAX_LENGTH_FIX_PASSES; pass += 1) {
     const length = articleBodyLength(article, lang);
-    const miss = distanceToBand(length, band);
+    const miss = articleLengthDistance(length, spec);
     if (miss === 0) break;
-    const fixedRaw = await ask(articleLengthFixPrompt(article, input, length, band), {
+    const fixedRaw = await ask(articleLengthFixPrompt(article, input, length), {
       temperature: 0.72,
       maxTokens,
     });
     const fixed = normalizeArticle(await parseJsonWithRepair<unknown>(fixedRaw, ask, "article JSON object"));
     if (!fixed) break;
     // 只在更接近目标区间时采用；否则保留上一版，避免越改越糟
-    if (distanceToBand(articleBodyLength(fixed, lang), band) >= miss) break;
+    if (articleLengthDistance(articleBodyLength(fixed, lang), spec) >= miss) break;
     article = fixed;
   }
-  return article;
+  const length = measureArticleLength(article.paragraphs, lang, targetLength);
+  if (!length.inRange) {
+    const message =
+      lang === "zh"
+        ? `模型在 ${MAX_LENGTH_FIX_PASSES} 轮校准后仍未达到目标字数（实际 ${length.actual}，目标 ${length.min}-${length.max}），请重试。`
+        : `The model still missed the requested length after ${MAX_LENGTH_FIX_PASSES} correction passes (actual ${length.actual}, target ${length.min}-${length.max}). Please retry.`;
+    throw new ArticleLengthTargetError(message, length);
+  }
+  const referenceCount = researchReferenceCount(input.researchContext);
+  if (referenceCount > 0 && !hasValidCitationInEveryParagraph(article.paragraphs, referenceCount)) {
+    const citedRaw = await ask(articleCitationFixPrompt(article, input, referenceCount), {
+      temperature: 0.2,
+      maxTokens,
+    });
+    const cited = normalizeArticle(await parseJsonWithRepair<unknown>(citedRaw, ask, "article JSON object"));
+    if (!cited || !hasValidCitationInEveryParagraph(cited.paragraphs, referenceCount)) {
+      throw new ArticleCitationTargetError(
+        lang === "zh"
+          ? "模型未能为每个正文段落提供有效且可核验的来源编号，请重试。"
+          : "The model could not provide a valid, verifiable source marker for every body paragraph. Please retry."
+      );
+    }
+    const citedLength = measureArticleLength(cited.paragraphs, lang, targetLength);
+    if (!citedLength.inRange) {
+      const message =
+        lang === "zh"
+          ? `引用校准后的正文偏离目标字数（实际 ${citedLength.actual}，目标 ${citedLength.min}-${citedLength.max}），请重试。`
+          : `Citation repair moved the body outside the requested length (actual ${citedLength.actual}, target ${citedLength.min}-${citedLength.max}). Please retry.`;
+      throw new ArticleLengthTargetError(message, citedLength);
+    }
+    return { ...cited, length: citedLength };
+  }
+  return { ...article, length };
+}
+
+/** A bounded generation attempt could not satisfy the requested length band. */
+export class ArticleLengthTargetError extends Error {
+  constructor(
+    message: string,
+    readonly length: ArticleLengthMetadata
+  ) {
+    super(message);
+    this.name = "ArticleLengthTargetError";
+  }
+}
+
+/** A source-backed draft could not meet the inline-citation integrity gate. */
+export class ArticleCitationTargetError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ArticleCitationTargetError";
+  }
+}
+
+/** Count the numbered source blocks included in the prompt context. */
+function researchReferenceCount(context: string | undefined): number {
+  let max = 0;
+  for (const match of context?.matchAll(/^--- 来源资料 (\d+) ---$/gmu) ?? []) {
+    max = Math.max(max, Number(match[1]));
+  }
+  return max;
+}
+
+/** Every non-empty paragraph needs at least one marker, and every marker must exist. */
+function hasValidCitationInEveryParagraph(paragraphs: readonly string[], referenceCount: number): boolean {
+  return paragraphs
+    .filter((paragraph) => paragraph.trim().length > 0)
+    .every((paragraph) => {
+      const markers = [...paragraph.matchAll(/\[(\d+)\]/gu)].map((match) => Number(match[1]));
+      return markers.length > 0 && markers.every((id) => id >= 1 && id <= referenceCount);
+    });
 }
 
 /**
@@ -483,16 +559,14 @@ export function articleToRenderBlocks(
   }
 
   if (article.figure) {
-    // 前端有 imageUrl 时直接用原图；不必把（可能内嵌了 base64 图片的）大 SVG 发给浏览器
-    blocks.push({ type: "figure", ...article.figure, svg: article.figure.imageUrl ? "" : article.figure.svg });
+    blocks.push(safeRenderFigure(article.figure));
   }
 
   const bodyParagraphs = article.paragraphs.slice(1);
   const bodyFigures = article.bodyFigures ?? [];
   const figuresAfter = spreadFigures(bodyFigures, bodyParagraphs.length);
   const pushFigure = (figure: ArticleFigure) =>
-    // 前端有 imageUrl 时直接用原图；不必把（可能内嵌了 base64 图片的）大 SVG 发给浏览器
-    blocks.push({ type: "figure", ...figure, svg: figure.imageUrl ? "" : figure.svg });
+    blocks.push(safeRenderFigure(figure));
   if (bodyParagraphs.length === 0) {
     for (const figure of bodyFigures) pushFigure(figure);
   } else {
@@ -513,6 +587,18 @@ export function articleToRenderBlocks(
   return blocks;
 }
 
+/** Never expose a remote image URL to the browser; only emit the vetted, inlined SVG. */
+function safeRenderFigure(figure: ArticleFigure): Extract<ArticleRenderBlock, { type: "figure" }> {
+  return {
+    type: "figure",
+    title: figure.title,
+    caption: figure.caption,
+    svg: figure.svg,
+    sourceName: figure.sourceName,
+    sourceUrl: figure.sourceUrl,
+  };
+}
+
 /**
  * Attach references, relevant source images, and inline citations to an article.
  *
@@ -528,13 +614,17 @@ export async function enrichArticleWithResearch(
   accessedAt = new Date(),
   lang: Lang = "en"
 ): Promise<GeneratedArticle> {
-  const evidenceItems = items.slice(0, 8);
+  const evidenceItems = items.slice(0, 16);
   const references = formatReferences(evidenceItems, accessedAt);
-  // 配图从全部资料里选（图注自带来源名和链接），不受参考文献前 8 条的限制
-  const { lead, body } = await buildArticleFigures(article, items, lang);
+  const paragraphs = enforceInlineCitations(article.paragraphs, references.length);
+  // 配图从全部资料里选（图注自带来源名和链接），不受参考文献条数限制
+  const { lead, body } = await buildArticleFigures({ ...article, paragraphs }, items, lang);
   return {
     ...article,
-    paragraphs: enforceInlineCitations(article.paragraphs, references.length),
+    paragraphs,
+    ...(article.length
+      ? { length: measureArticleLength(paragraphs, lang, article.length.tier) }
+      : {}),
     references,
     figure: lead,
     bodyFigures: body,
@@ -861,19 +951,10 @@ const IMAGE_INLINE_MAX_BYTES = 3 * 1024 * 1024;
  */
 async function fetchImageDataUri(url: string, timeoutMs = 8000): Promise<string> {
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const res = await fetch(url, { signal: controller.signal, redirect: "follow" });
-      if (!res.ok) return "";
-      const type = res.headers.get("content-type")?.split(";")[0].trim().toLowerCase() ?? "";
-      if (!type.startsWith("image/") || type === "image/svg+xml") return "";
-      const bytes = Buffer.from(await res.arrayBuffer());
-      if (bytes.length === 0 || bytes.length > IMAGE_INLINE_MAX_BYTES) return "";
-      return `data:${type};base64,${bytes.toString("base64")}`;
-    } finally {
-      clearTimeout(timer);
-    }
+    const image = await fetchSafeImageBinary(url, timeoutMs, IMAGE_INLINE_MAX_BYTES);
+    return image
+      ? `data:${image.mimeType};base64,${image.bytes.toString("base64")}`
+      : "";
   } catch {
     return "";
   }

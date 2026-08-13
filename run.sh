@@ -47,7 +47,22 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-echo "▶ Starting backend  → http://localhost:8787"
+# Node 24+ can route built-in fetch/http traffic through inherited
+# HTTP_PROXY / HTTPS_PROXY values. The backend also applies .env values after
+# dotenv loads on Node 24.14+.
+export NODE_USE_ENV_PROXY=1
+EXISTING_NO_PROXY="${NO_PROXY:-${no_proxy:-}}"
+export NO_PROXY="localhost,127.0.0.1${EXISTING_NO_PROXY:+,$EXISTING_NO_PROXY}"
+export no_proxy="$NO_PROXY"
+
+FRONTEND_PORT="${FRONTEND_PORT:-$(node "$ROOT/scripts/find-open-port.mjs" 51773)}"
+export FRONTEND_PORT
+export CORS_ORIGINS="http://127.0.0.1:${FRONTEND_PORT},http://localhost:${FRONTEND_PORT}"
+if [ "$FRONTEND_PORT" != "51773" ]; then
+  echo "• Port 51773 is occupied; using $FRONTEND_PORT instead."
+fi
+
+echo "▶ Starting backend  → http://127.0.0.1:8787"
 (cd "$BACKEND" && npm start) &
 pids+=("$!")
 

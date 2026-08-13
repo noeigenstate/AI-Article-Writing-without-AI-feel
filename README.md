@@ -34,7 +34,7 @@ Open-source AI writing workbench for **Word rewriting**, **human-likeness scorin
 - **Click any sentence** to get alternatives or edit it by hand.
 - **Learn your style** from uploaded `.docx` or `.txt` samples.
 - **Show progress while the model works** for article writing, whole-document rewriting, title options, and topic generation.
-- **Generate an article from a title or domain** with arXiv papers, RSS news sources, and optional Agent-Reach / Exa web search.
+- **Generate an article from a title or domain** with default searches across relevant web articles, public comments, arXiv papers, and RSS news, using attributed paraphrases or short excerpts.
 - **Auto-format generated articles for the WeChat Official Account editor**: pick a visual theme in the article editor, click Auto-format, then copy the result straight into 公众号 with one click.
 - **Run privately** with any OpenAI-compatible endpoint, including local model servers.
 
@@ -68,7 +68,7 @@ On Windows you can also double-click or run:
 run.bat
 ```
 
-The script checks basic dependencies, prepares `backend/.env` on first run, installs packages, clears the same service port before starting, and opens one frontend/backend session.
+The launchers check basic dependencies, prepare `backend/.env` on first run, and install packages. Both keep the frontend and backend in one terminal, prefer frontend port `51773`, move to the next available port when needed, and print one actual access URL only after both services are ready. Windows `run.bat` also closes stale project instances and prefixes each service's logs. Press `Ctrl+C` once to stop both services.
 
 Stop the services:
 
@@ -95,8 +95,11 @@ npm install
 npm run dev
 ```
 
-Backend: `http://localhost:8787`  
-Frontend: Vite will print the local URL, normally `http://localhost:5173`
+Backend: `http://127.0.0.1:8787`
+
+Frontend: `http://127.0.0.1:51773` by default (the launcher prints the actual port)
+
+The backend binds to `127.0.0.1` by default and accepts browser requests only from the two fixed local frontend origins. Deliberate LAN deployments can override `HOST` and set exact comma-separated `CORS_ORIGINS` values in `backend/.env`; wildcard origins are rejected.
 
 ## Interface
 
@@ -141,13 +144,23 @@ The rewrite prompt also applies a creator workflow: humanize the prose first, ke
 
 ## Live Sources
 
-Article generation can collect live context from arXiv, RSS feeds, and optional Agent-Reach / Exa web search. Slow, blocked, or missing sources are recorded as unavailable instead of breaking the whole article.
+Topic and article generation issue both a domestic Chinese query and an international English query, then combine Google News, Hacker News-linked articles and public comments, arXiv, open-web search, and domain RSS. Common concepts use a deterministic bilingual map; when that map cannot cross languages, the configured model is asked for a short, validated search-query translation. If translation is unavailable or rejected, both regional searches still run with the original topic instead of inventing coverage. Each topic starts with four domestic and four international feeds, then interleaves results by evidence type, region, and publisher so one geography or aggregator cannot dominate the context. Slow, blocked, or missing sources are recorded as unavailable instead of breaking the whole article.
 
-Current enabled RSS sources include NPR World, France 24, CNBC World, UN News, TechCrunch, Ars Technica, Wired, MIT Technology Review, Engadget, Hacker News via HNRSS, CNBC Top News, MarketWatch, and 36Kr.
+Domestic feeds include SSPAI, IT Home, cnBeta, GeekPark, ScienceNet and its opinion channel, TMTPost, plus China Daily's China, business, and opinion channels. International feeds include BBC World, NPR World, France 24, Al Jazeera, UN News, WHO News, Nature, TechCrunch, Ars Technica, Wired, MIT Technology Review, Engadget, Hacker News, CNBC, and MarketWatch.
 
-The Agent-Reach integration currently uses its Exa/mcporter search path as a broad web source; on Windows the call goes through cmd.exe with proper argument quoting, so it works the same as on macOS/Linux. Reddit, X/Twitter, Xiaohongshu, and similar logged-in social channels require credentials/cookies and are intentionally not switched on automatically.
+Google News and Hacker News search need no key. Set `EXA_API_KEY` in `backend/.env` to search more web articles and public discussions from Reddit, Hacker News, Zhihu, Quora, Stack Overflow, and Stack Exchange directly; Agent-Reach/mcporter remains a fallback. Private or logged-in content is not collected.
 
-Inline `[n]` citations appear only where the model actually cited a reference — markers pointing at nonexistent references are stripped rather than fabricated. When the lead figure uses a real source image, the image is downloaded and embedded into the exported Word file (Word does not load external image URLs).
+The generation page notes that many sources are hosted internationally and that an international proxy can improve coverage on unreliable networks. To route backend requests explicitly, set `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` in `backend/.env`; Node.js 24.14+ enables the proxy after loading `.env`, while Windows `run.bat` also picks up proxy variables already present when it starts.
+
+Writing prompts ask the model to compare shared facts, narrative differences, institutional and market context, and genuine disputes across regions. Source count is never treated as consensus, and the model is told not to manufacture false balance.
+
+The writing prompt tells the model to paraphrase web material by default. When exact wording matters, it asks for no more than 60 Chinese characters or 25 English words and an immediate citation. Public comments are labeled for personal experience, disagreement, or counterpoints rather than facts or statistics; quotations and semantic attribution should still receive a human check before publication.
+
+Inline `[n]` citations must resolve to the retrieved source list. If any body paragraph lacks a valid marker, the backend runs one evidence-aware repair pass and rejects the draft if citation integrity still fails; markers pointing at nonexistent references are stripped rather than fabricated. Source images are downloaded through the backend's outbound-safety policy and embedded in Word and browser preview data rather than loaded remotely by the browser.
+
+## Article Length Targets
+
+Length tiers use explicit body-only ranges: Chinese short 450–650 characters, medium 1,000–1,300, and long 3,000–3,800; English short 350–500 words, medium 850–1,100, and long 2,200–2,800. If the first draft misses its band, the backend runs up to two corrective passes. A generation request succeeds only when the final body is inside its selected range; a persistent miss returns a retryable error instead of an off-target article. The final count and target range travel with successful responses and update live while editing. Titles, references, inline citation markers, figure captions, and tables do not count toward the body target.
 
 ## WeChat Formatting (公众号排版)
 
@@ -174,7 +187,9 @@ LLM_REASONING_EFFORT=off
 ```bash
 cd backend
 npm run build
+npm run test:article
 npm run test:research
+npm run test:research-security
 npm run test:score
 ```
 

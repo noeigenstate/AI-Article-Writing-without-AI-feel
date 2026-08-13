@@ -1,11 +1,17 @@
 import { execFile, type ExecFileOptionsWithStringEncoding } from "node:child_process";
 import { promisify } from "node:util";
 import { cached } from "./cache.js";
-import type { ResearchItem } from "./types.js";
+import { inferPublisherName, inferPublisherRegion } from "./rss.js";
+import type { ResearchItem, ResearchSourceKind } from "./types.js";
 
 const execFileAsync = promisify(execFile);
 const SOURCE_ID = "agent-reach-exa";
-const SOURCE_NAME = "Agent-Reach / Exa";
+
+export interface McporterInvocation {
+  executable: "mcporter";
+  args: readonly ["call", string];
+  options: ExecFileOptionsWithStringEncoding;
+}
 
 interface AgentReachRawResult {
   title?: unknown;
@@ -20,7 +26,11 @@ interface AgentReachRawResult {
 }
 
 /** Parse Exa/MCP output collected through Agent-Reach's selected search backend. */
-export function parseAgentReachSearchOutput(output: string, query: string): ResearchItem[] {
+export function parseAgentReachSearchOutput(
+  output: string,
+  query: string,
+  sourceKind: Extract<ResearchSourceKind, "article" | "comment"> = "article"
+): ResearchItem[] {
   const parsed = parseUnknownJson(output);
   const results = findResultArray(parsed);
   if (!results) {
@@ -28,49 +38,81 @@ export function parseAgentReachSearchOutput(output: string, query: string): Rese
   }
 
   return results
-    .map((result) => normalizeResult(result, query))
+    .map((result) => normalizeResult(result, query, sourceKind))
     .filter((item): item is ResearchItem => Boolean(item));
 }
 
 /** Collect web search results via Agent-Reach's Exa/mcporter backend when available. */
-export function fetchAgentReachSearch(query: string, limit = 6): Promise<ResearchItem[]> {
-  // 引号和 % 对搜索无意义，却会破坏 JSON 引号包装 / 被 cmd 变量展开，直接去掉
-  const cleanQuery = query.replace(/["%]/g, " ").replace(/\s+/g, " ").trim();
-  if (!cleanQuery) {
+export function fetchAgentReachSearch(
+  query: string,
+  limit = 6,
+  sourceKind: Extract<ResearchSourceKind, "article" | "comment"> = "article"
+): Promise<ResearchItem[]> {
+  // Agent-Reach currently exposes mcporter as a command shim on Windows. Node
+  // cannot execute that shim without cmd.exe, and passing user text through a
+  // shell is not an acceptable boundary, so this optional fallback is disabled.
+  if (process.platform === "win32") {
     return Promise.resolve([]);
   }
 
-  return cached(`agent-reach:${cleanQuery}:${limit}`, 20 * 60 * 1000, async () => {
-    const expression = `exa.web_search_exa(query: ${JSON.stringify(cleanQuery)}, numResults: ${limit})`;
-    const opts = mcporterExecOptions();
-    // shell 模式下 Node 不做任何引号处理，必须自己把表达式包成单个参数
-    const args = ["call", opts.shell ? quoteForWindowsShell(expression) : expression];
-    const { stdout } = await execFileAsync("mcporter", args, opts);
+  const cleanQuery = cleanText(query, 240);
+  if (!cleanQuery) {
+    return Promise.resolve([]);
+  }
+  const safeLimit = Math.max(1, Math.min(20, Math.trunc(Number.isFinite(limit) ? limit : 6)));
 
-    return parseAgentReachSearchOutput(stdout, cleanQuery).slice(0, limit);
+  return cached(`agent-reach:${cleanQuery}:${safeLimit}`, 20 * 60 * 1000, async () => {
+    const invocation = buildMcporterInvocation(cleanQuery, safeLimit);
+    if (!invocation) {
+      return [];
+    }
+    const { stdout } = await execFileAsync(
+      invocation.executable,
+      [...invocation.args],
+      invocation.options
+    );
+
+    return parseAgentReachSearchOutput(stdout, cleanQuery, sourceKind).slice(0, safeLimit);
   });
 }
 
-export function mcporterExecOptions(platform: NodeJS.Platform = process.platform): ExecFileOptionsWithStringEncoding {
+/** Build a shell-free mcporter invocation, or disable this fallback on Windows. */
+export function buildMcporterInvocation(
+  query: string,
+  limit = 6,
+  platform: NodeJS.Platform = process.platform
+): McporterInvocation | undefined {
+  if (platform === "win32") {
+    return undefined;
+  }
+  const cleanQuery = cleanText(query, 240);
+  if (!cleanQuery) {
+    return undefined;
+  }
+  const safeLimit = Math.max(1, Math.min(20, Math.trunc(Number.isFinite(limit) ? limit : 6)));
+  const expression = `exa.web_search_exa(query: ${JSON.stringify(cleanQuery)}, numResults: ${safeLimit})`;
+  return {
+    executable: "mcporter",
+    args: ["call", expression],
+    options: mcporterExecOptions(platform),
+  };
+}
+
+export function mcporterExecOptions(_platform: NodeJS.Platform = process.platform): ExecFileOptionsWithStringEncoding {
   return {
     encoding: "utf8",
     timeout: 18_000,
     maxBuffer: 1_000_000,
     windowsHide: true,
-    // Node 22 起 execFile 直接调 .cmd 会抛 EINVAL（CVE-2024-27980），Windows 上必须经 shell
-    shell: platform === "win32",
+    shell: false,
   };
 }
 
-/**
- * Wrap one argument for cmd.exe so it survives `execFile(..., { shell: true })`,
- * which joins args with spaces without quoting.
- */
-export function quoteForWindowsShell(arg: string): string {
-  return `"${arg.replace(/"/g, '\\"')}"`;
-}
-
-function normalizeResult(raw: unknown, query: string): ResearchItem | undefined {
+function normalizeResult(
+  raw: unknown,
+  query: string,
+  sourceKind: Extract<ResearchSourceKind, "article" | "comment">
+): ResearchItem | undefined {
   if (!isRecord(raw)) {
     return undefined;
   }
@@ -82,20 +124,24 @@ function normalizeResult(raw: unknown, query: string): ResearchItem | undefined 
     return undefined;
   }
 
+  const excerpt = cleanText(asString(result.text), 280);
   const summary =
-    cleanText(asString(result.text), 700) ||
     cleanText(asString(result.summary), 700) ||
     cleanText(asString(result.snippet), 700) ||
+    excerpt ||
     "";
   const publishedAt = normalizeDate(asString(result.publishedDate) || asString(result.publishedAt));
+  const sourceName = inferPublisherName(url);
 
   return {
     id: `${SOURCE_ID}:${url.trim().toLowerCase()}`,
-    sourceKind: "news",
-    sourceName: SOURCE_NAME,
+    sourceKind,
+    sourceName,
     sourceId: SOURCE_ID,
+    region: inferPublisherRegion(url, sourceName, "global"),
     title,
     summary,
+    excerpt: excerpt || undefined,
     url,
     publishedAt,
     authors: normalizeAuthors(result.author ?? result.authors),
