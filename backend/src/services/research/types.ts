@@ -1,5 +1,8 @@
-/** Whether a research item came from a paper or a news source. */
-export type ResearchSourceKind = "paper" | "news";
+/** What kind of evidence a research item represents. */
+export type ResearchSourceKind = "paper" | "news" | "article" | "comment";
+
+/** Geographic perspective represented by a source. */
+export type ResearchRegion = "domestic" | "international" | "global";
 
 /** Category of a news/RSS source, used to pick feeds per domain. */
 export type NewsSourceType = "international" | "technology" | "finance" | "chinese";
@@ -9,6 +12,9 @@ export interface NewsSource {
   id: string;
   name: string;
   type: NewsSourceType;
+  /** Editorial region for a fixed feed; aggregators use `global` until each publisher is inferred. */
+  region: ResearchRegion;
+  language: "zh" | "en";
   url: string;
   enabled: boolean;
 }
@@ -19,8 +25,12 @@ export interface ResearchItem {
   sourceKind: ResearchSourceKind;
   sourceName: string;
   sourceId: string;
+  /** Used to keep domestic and international perspectives represented. */
+  region: ResearchRegion;
   title: string;
   summary: string;
+  /** A short verbatim passage that may be quoted sparingly with attribution. */
+  excerpt?: string;
   url: string;
   imageUrl?: string;
   publishedAt: string;
@@ -34,4 +44,10 @@ export interface ResearchBundle {
   generatedAt: string;
   items: ResearchItem[];
   unavailableSources: string[];
+  coverage: {
+    domestic: number;
+    international: number;
+    global: number;
+    uniqueSources: number;
+  };
 }

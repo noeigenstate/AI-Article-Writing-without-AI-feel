@@ -7,7 +7,7 @@
 一个开源 AI 写作工作台：支持 **Word 改写**、**人类感评分**、**带资料来源的文章生成**、**公众号一键排版**。界面支持中文和英文。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-22a06b.svg)](LICENSE)
-![Node](https://img.shields.io/badge/Node-%E2%89%A518-339933?logo=node.js&logoColor=white)
+![Node](https://img.shields.io/badge/Node-%E2%89%A520.9-339933?logo=node.js&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178c6?logo=typescript&logoColor=white)
 ![React](https://img.shields.io/badge/React-18-61dafb?logo=react&logoColor=white)
 
@@ -21,10 +21,10 @@
 
 | 改写 Word | 生成文章 | 公众号排版 |
 | --- | --- | --- |
-| <img src="assets/screenshots/01-rewrite.png" alt="改写 Word 页面" /> | <img src="assets/screenshots/02-generate.png" alt="生成文章页面" /> | <img src="assets/screenshots/03-gzh.png" alt="公众号排版页面" /> |
+| <img src="assets/screenshots/01-rewrite.png" alt="编辑部校样台风格的 Word 改写流程" /> | <img src="assets/screenshots/02-generate.png" alt="带资料来源的文章生成流程" /> | <img src="assets/screenshots/03-gzh.png" alt="已恢复真实来源图片和署名的公众号排版预览" /> |
 
 <div align="center">
-  <sub>清爽的 SaaS 风格工作台：Word 改写、带来源文章生成和公众号排版，都在同一个侧边栏导航里。</sub>
+  <sub>编辑部校样台：Word 改写、带来源文章生成，以及包含真实来源图片的自包含公众号排版。</sub>
 </div>
 
 ## 它能做什么
@@ -34,7 +34,8 @@
 - **逐句修改**：点任意句子，选择替代表达，或者手动改。
 - **学习你的口吻**：上传 `.docx` 或 `.txt` 范文，让输出更像你的风格。
 - **显示模型工作进度**：生成文章、整篇润色、标题候选、选题生成都会显示百分比、当前阶段和日志。
-- **按标题或领域生成文章**：自动查 arXiv 论文、新闻 RSS，并可选接入 Agent-Reach / Exa 全网搜索，带资料、图表和引用。
+- **按标题或领域生成文章**：默认搜索相关网页文章、公开评论、arXiv 论文和新闻 RSS，合理转述或短摘录，并带来源、图表和引用。
+- **让真实来源素材贯穿完整流程**：后端下载并校验带署名的网络图片或 GIF，同一份安全字节会用于编辑器预览、Word 和公众号导出。
 - **生成文章后一键排版公众号**：在文章编辑器里选主题、点「自动排版」，排版结果一键复制、直接粘贴进微信公众号编辑器，样式不丢。
 - **可以本地私有运行**：支持 Ollama、LM Studio、vLLM 等 OpenAI 兼容接口。
 
@@ -44,7 +45,7 @@
 
 | 环境 | 用来做什么 |
 | --- | --- |
-| Node.js 18+ | 运行前端和后端 |
+| Node.js 20.9+（推荐 22/24） | 运行前端、后端及真实来源图片解码校验 |
 | npm | 安装项目依赖 |
 | 模型 API Key | 默认可接 DeepSeek / OpenAI 兼容接口 |
 | 或本地模型服务 | 例如 Ollama、LM Studio、vLLM |
@@ -68,7 +69,7 @@ Windows 也可以双击或运行：
 run.bat
 ```
 
-启动脚本会检查基础依赖，首次运行会准备 `backend/.env`，安装依赖，并在启动前清理同一个服务端口，避免后台旧进程占用端口。
+启动脚本会检查基础依赖，首次运行会准备 `backend/.env` 并安装依赖。两个脚本都会在同一个终端中运行前后端；它们优先使用前端端口 `51773`，被其他程序占用时会自动选择下一个空闲端口，并在前后端都就绪后打印唯一的实际访问地址。Windows 的 `run.bat` 还会先关闭本项目的旧实例并用名称前缀区分日志。按一次 `Ctrl+C` 即可同时停止两个服务。
 
 停止服务：
 
@@ -95,12 +96,15 @@ npm install
 npm run dev
 ```
 
-后端：`http://localhost:8787`  
-前端：Vite 会打印本地地址，通常是 `http://localhost:5173`
+后端：`http://127.0.0.1:8787`
+
+前端：默认 `http://127.0.0.1:51773`（一键启动器会打印实际端口）
+
+后端默认只监听 `127.0.0.1`，浏览器请求也只允许两个固定的本地前端地址。如确需在局域网部署，可在 `backend/.env` 中覆盖 `HOST`，并用 `CORS_ORIGINS` 填写逗号分隔的精确来源；系统不会接受通配符来源。
 
 ## 界面风格
 
-当前界面是清爽的 SaaS 风格工作台：左侧白色边栏负责工具切换和语言切换，主区是柔和的极光渐变底、渐变大标题、白色圆角步骤卡片和紫色渐变主按钮。目标是一个像现代网页工具的写作工作台，而不是装饰性皮肤。
+当前界面是一张“编辑部校样台”：深墨绿色边栏围住冷调纸张画布，珊瑚色标记会改变正文的动作，青色承载证据与焦点，完成稿落在白色文稿纸上。Word 改写与文章生成拥有彼此独立、持续保留的工作区，切换模式不会丢掉正在编辑的文稿或公众号排版结果。
 
 所有长耗时动作都会有明确反馈。前端会为文章生成、选题/标题生成和整篇润色显示进度面板，包括百分比、当前阶段和最近日志，避免用户空等。
 
@@ -141,13 +145,31 @@ npm run dev
 
 ## 实时资料来源
 
-生成文章时，后端会尝试从 arXiv、RSS 源和可选的 Agent-Reach / Exa 全网搜索收集资料。某个来源慢、超时或未配置，不会让整篇文章失败，只会记录为“暂不可用”。
+生成选题和文章时，后端会同时发出国内中文检索和国际英文检索，并从 Google News、Hacker News 收录的网页文章与公开评论、arXiv、开放网页搜索和领域 RSS 汇总资料。常见概念优先使用本地双语映射；本地映射无法跨语言时，再由当前配置的模型生成简短且经过校验的另一语种检索词。翻译不可用或未通过校验时，两侧仍会用原主题继续检索，不会编造覆盖结果。每个主题默认各选 4 个国内、4 个国际 RSS 源，再按“资料类型 × 地区 × 发布机构”交错排序，避免结果被单一地区或聚合平台占满。某个来源慢、超时或未配置，不会让整篇文章失败，只会记录为“暂不可用”。
 
-当前启用的 RSS 源包括 NPR World、France 24、CNBC World、UN News、TechCrunch、Ars Technica、Wired、MIT Technology Review、Engadget、Hacker News via HNRSS、CNBC Top News、MarketWatch 和 36Kr。
+国内来源包括少数派、IT之家、cnBeta、极客公园、科学网、科学网评论、钛媒体，以及 China Daily 的中国、商业和评论频道；国际来源包括 BBC World、NPR World、France 24、Al Jazeera、UN News、WHO News、Nature、TechCrunch、Ars Technica、Wired、MIT Technology Review、Engadget、Hacker News、CNBC 和 MarketWatch。
 
-目前 Agent-Reach 集成的是 Exa/mcporter 搜索路径，用作宽泛网页资料来源；Windows 下会经 cmd.exe 调用并正确转义参数，行为与 macOS/Linux 一致。Reddit、X/Twitter、小红书等需要登录态的社交来源，需要单独配置凭证/cookies，因此不会默认开启。
+Google News 和 Hacker News 检索不需要密钥。在 `backend/.env` 中配置 `EXA_API_KEY` 后，系统会直接搜索更多网页文章，并从 Reddit、Hacker News、知乎、Quora、Stack Overflow / Stack Exchange 等公开讨论页补充观点；未配置时仍兼容 Agent-Reach / mcporter。需要登录态的私密内容不会抓取。
 
-正文中的 `[n]` 引用只出现在模型真实引用了资料的位置——指向不存在参考文献的编号会被清理，而不是补造假引用。头图使用真实来源图片时，图片会被下载并内嵌进导出的 Word（Word 不会加载外链图片）。
+生成页会提示：境外站点较多，网络不稳定时开启境外代理通常能获得更完整的检索结果。如果希望后端请求也明确走本地代理，可在 `backend/.env` 设置 `HTTP_PROXY`、`HTTPS_PROXY` 和 `NO_PROXY`；Node.js 24.14+ 会在加载 `.env` 后动态启用代理，Windows 的 `run.bat` 也会读取启动前已存在的代理环境变量。
+
+写作提示会要求模型对照国内外资料中的共同事实、叙事差异、制度与市场背景及真实争议；来源数量本身不被当成共识，也不会为了“平衡”而制造虚假的两边论。
+
+写作提示会要求模型默认转述网页内容；只有原话本身有分析价值时才使用短摘录，并要求每处不超过 60 个中文字或 25 个英文词、紧跟来源编号。公开评论会被明确标为个人体验、分歧或反方观点，不应当成事实、统计或权威证据；发布前仍应人工复核引语和语义归属。
+
+正文中的 `[n]` 只保留能对应真实检索资料的编号。模型会尽量为事实、数据和外部材料标注来源，但缺少编号不会阻断文章生成；指向不存在参考文献的编号会被清理，无引用段落保持无引用，不会补造来源。检索到的参考资料仍会附在文末。来源图片会经过后端出站安全策略下载，再以内嵌数据用于 Word 和浏览器预览；浏览器不会直接加载来源站的图片地址。
+
+## 叙事与多媒体
+
+生成前会先在模型内部合并重复资料，并按“读者问题—事实证据—机制解释—争议与限制—可落地判断”组织，而不是按来源逐条摘要。正文带有段落角色和章节锚点：中长文自动生成便于扫读的小标题；严重缺失开场、证据、解释或结尾回扣时，系统最多做一次非阻断式阅读流修复，修复失败仍保留原本可用的文章。
+
+文学手法按场景限量使用。公众号和通用文章可以使用有资料支撑的欲扬先抑、少量拟人、场景与结尾回扣，让情绪从疑问或落差走向理解；商务、学术、公文和技术写作会主动降低或关闭这些修辞。修辞不能制造人物心理、对话、新闻现场、机构意图或群体情绪，事实句与意象句保持边界。
+
+系统只使用与正文相关、来源明确且原始字节通过后端安全校验的真实网络图片或 GIF。系统会优先采用资料原文中的图片；不足时检索 Openverse 收录的开放许可实拍图，并把创作者、许可名称与链接、原始作品页追加到图片说明和参考资料中。篇幅档位只规定上限：短篇最多 2 张、中篇最多 4 张、长篇最多 6 张，并不是必须凑满的数量。图片无法下载、与正文无关、校验失败、超出预算或无法核验来源时，文章会少配图或不配图，不会绘制阅读地图、证据卡、占位图，也不会生成替代图片。文章编辑器里的 GIF 只有在用户主动点击播放后才挂载和解码；开启“减少动态效果”时不会挂载。Word 与公众号导出使用同一份已校验来源媒体。公众号排版时，图片字节不会进入模型提示词；经过净化的 HTML 返回后，前端才按稳定插入标记恢复真实图片，从而生成不依赖远程盗链的自包含预览。图像生成能力留待以后接入专门模型。Openverse 汇集的许可元数据仍需在原始作品页复核；标注来源本身不等于自动获得转载许可。
+
+## 文章字数目标
+
+字数档位使用明确范围，并只计算正文：中文短篇 450–650 字、中篇 1000–1300 字、长篇 3000–3800 字；英文短篇 350–500 词、中篇 850–1100 词、长篇 2200–2800 词。模型首次生成偏离范围时，后端最多自动校准两轮；只有最终正文落在所选范围内，生成请求才会成功，持续偏离会返回可重试错误而不是展示一篇不达标的成品。成功结果会返回实际字数和目标范围，并在编辑器中随修改实时更新。标题、参考资料、行内引用编号、图注和表格不计入正文目标。
 
 ## 公众号排版
 
@@ -155,6 +177,7 @@ npm run dev
 
 - **六套主题** 基于 [gzh-design-skill](https://github.com/isjiamu/gzh-design-skill) 的组件库：翡翠清新、红白杂志、石墨极简、禅意留白、创意票据、橄榄内刊。每套主题定义了封面、章节标题、引言卡、签名区等组件，模型按章节取组件装配。
 - **确定性合规校验**（移植自该 skill 的 Python 校验器）：禁用标签/样式记为错误，漏包裹和半角标点记为提醒，违规块自动修复一轮。
+- **自包含来源素材**：已经校验的图片字节不会进入排版模型提示词；返回的 HTML 完成净化后，前端才恢复稳定占位标记，所以预览会带回真实图片与署名，也不依赖远程盗链。
 - **一键粘贴**：预览即最终效果，点「复制到公众号」把富文本放进剪贴板直接去粘贴；下载的 HTML 是自带复制按钮的独立预览页。
 
 ## 本地私有模式
@@ -174,7 +197,12 @@ LLM_REASONING_EFFORT=off
 ```bash
 cd backend
 npm run build
+npm run test:article
 npm run test:research
+npm run test:research-security
+npm run test:licensed-media
+npm run test:docx
+npm run test:gzh-security
 npm run test:score
 ```
 
@@ -182,6 +210,8 @@ npm run test:score
 cd frontend
 npm run build
 npm run test:progress
+npm run test:gzh-security
+npm run test:api-network
 ```
 
 ## 项目结构
@@ -196,7 +226,7 @@ backend/
 frontend/
   src/components/  上传、生成、公众号排版、编辑器、通用组件
   src/lib/         API、状态、国际化文案
-  src/styles.css   浅色工作台主题（边栏、大标题、卡片）
+  src/styles.css   编辑部校样台主题与响应式布局
 
 assets/screenshots/  README 截图
 docs/                设计资料

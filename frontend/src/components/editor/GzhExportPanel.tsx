@@ -1,15 +1,23 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   fetchGzhThemes,
   formatGzhArticle,
   type GzhFormatResponseDTO,
   type GzhThemeDTO,
 } from "../../lib/api.js";
-import { paragraphsToMarkdown, renderBlocksToMarkdown } from "../../lib/gzhMarkdown.js";
+import { paragraphsToMarkdown, renderBlocksForGzh } from "../../lib/gzhMarkdown.js";
+import { hydrateGzhSourceMedia } from "../../lib/gzhMedia.js";
 import { useStore } from "../../lib/store.js";
 import { Sparkle } from "../common/icons.js";
 import ProgressBanner from "../common/ProgressBanner.js";
 import { messages } from "../../lib/i18n.js";
+
+/** A blocking backend validation error makes both rich-copy and HTML download unavailable. */
+export function canExportGzhResult(
+  result: Pick<GzhFormatResponseDTO, "validation"> | GzhFormatResponseDTO | null
+): result is GzhFormatResponseDTO {
+  return Boolean(result && result.validation.errors.length === 0);
+}
 
 /**
  * Inline 公众号排版 panel for the current editor document: pick a theme,
@@ -31,6 +39,7 @@ export default function GzhExportPanel() {
   const [result, setResult] = useState<GzhFormatResponseDTO | null>(null);
   const [copied, setCopied] = useState<"ok" | "fail" | null>(null);
   const frameRef = useRef<HTMLIFrameElement>(null);
+  const themeSelectId = useId();
 
   useEffect(() => {
     void fetchGzhThemes(lang).then((list) => {
@@ -39,10 +48,14 @@ export default function GzhExportPanel() {
     });
   }, [lang]);
 
-  function buildMarkdown(): string {
+  function buildGzhInput() {
     return renderBlocks?.length
-      ? renderBlocksToMarkdown(renderBlocks, paragraphs)
-      : paragraphsToMarkdown(paragraphs, titleIndex);
+      ? renderBlocksForGzh(renderBlocks, paragraphs)
+      : { markdown: paragraphsToMarkdown(paragraphs, titleIndex), sourceMedia: [] };
+  }
+
+  function buildMarkdown(): string {
+    return buildGzhInput().markdown;
   }
 
   async function format() {
@@ -52,7 +65,21 @@ export default function GzhExportPanel() {
     setCopied(null);
     setProgress({ task: "gzhFormat", startedAt: Date.now() });
     try {
-      setResult(await formatGzhArticle(buildMarkdown(), themeId, "", lang));
+      const prepared = buildGzhInput();
+      const formatted = await formatGzhArticle(prepared.markdown, themeId, "", lang);
+      const hydrated = hydrateGzhSourceMedia(formatted.html, prepared.sourceMedia, lang);
+      const mediaWarning = hydrated.missingTokens.length > 0
+        ? (lang === "zh"
+            ? `有 ${hydrated.missingTokens.length} 个来源素材未能恢复，已保留为待补素材。`
+            : `${hydrated.missingTokens.length} source media item(s) could not be restored and remain placeholders.`)
+        : undefined;
+      setResult({
+        ...formatted,
+        html: hydrated.html,
+        validation: mediaWarning
+          ? { ...formatted.validation, warnings: [...formatted.validation.warnings, mediaWarning] }
+          : formatted.validation,
+      });
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -63,6 +90,7 @@ export default function GzhExportPanel() {
 
   /** Copy the formatted rich text: ClipboardItem first, iframe selection as fallback. */
   async function copyToClipboard() {
+    if (!canExportGzhResult(result)) return;
     if (result && typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
       try {
         await navigator.clipboard.write([
@@ -101,8 +129,8 @@ export default function GzhExportPanel() {
   }
 
   function downloadHtml() {
-    if (!result) return;
-    const page = buildStandalonePreview(result.title, result.html, t.gzhCopyBtn);
+    if (!canExportGzhResult(result)) return;
+    const page = buildStandalonePreview(result.title, result.html, t.gzhCopyBtn, lang);
     const blob = new Blob([page], { type: "text/html;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -114,13 +142,18 @@ export default function GzhExportPanel() {
 
   const isBusy = working || Boolean(globalBusy);
   const validation = result?.validation;
+  const hasBlockingValidation = Boolean(result && !canExportGzhResult(result));
   const selectedTheme = themes.find((x) => x.id === themeId);
 
   return (
     <section className="gzh-panel">
       <div className="gzh-panel-row">
         <strong className="gzh-panel-title">{t.gzhPanelTitle}</strong>
+        <label className="sr-only" htmlFor={themeSelectId}>
+          {lang === "zh" ? "排版主题" : "Formatting theme"}
+        </label>
         <select
+          id={themeSelectId}
           className="styleselect compact"
           value={themeId}
           disabled={isBusy}
@@ -138,20 +171,30 @@ export default function GzhExportPanel() {
         </button>
         {result && (
           <>
-            <button className="primary" onClick={() => void copyToClipboard()}>
+            <button
+              className="primary"
+              disabled={hasBlockingValidation}
+              title={hasBlockingValidation ? (lang === "zh" ? "请先解决阻断问题" : "Resolve blocking issues before copying") : undefined}
+              onClick={() => void copyToClipboard()}
+            >
               {t.gzhCopyBtn}
             </button>
-            <button className="ghost" onClick={downloadHtml}>
+            <button
+              className="ghost"
+              disabled={hasBlockingValidation}
+              title={hasBlockingValidation ? (lang === "zh" ? "请先解决阻断问题" : "Resolve blocking issues before downloading") : undefined}
+              onClick={downloadHtml}
+            >
               {t.gzhDownloadBtn}
             </button>
           </>
         )}
       </div>
       {selectedTheme && !result && !working && <p className="hint gzh-scene">{selectedTheme.scene}</p>}
-      {error && <div className="error topic-error">{error}</div>}
+      {error && <div className="error topic-error" role="alert">{error}</div>}
       {working && progress && <ProgressBanner busy={t.gzhFormatting} progress={progress} lang={lang} />}
-      {copied === "ok" && <div className="banner busy gzh-toast-ok">{t.gzhCopied}</div>}
-      {copied === "fail" && <div className="error topic-error">{t.gzhCopyFail}</div>}
+      {copied === "ok" && <div className="banner busy gzh-toast-ok" role="status">{t.gzhCopied}</div>}
+      {copied === "fail" && <div className="error topic-error" role="alert">{t.gzhCopyFail}</div>}
       {result && (
         <>
           <div className="gzh-result-bar">
@@ -159,6 +202,7 @@ export default function GzhExportPanel() {
               className={`gzh-validation ${
                 validation && validation.errors.length ? "bad" : validation?.warnings.length ? "warn" : "ok"
               }`}
+              role={validation && validation.errors.length ? "alert" : "status"}
             >
               {validation && validation.errors.length
                 ? t.gzhValidationErr(validation.errors.length)
@@ -192,7 +236,7 @@ export default function GzhExportPanel() {
             className="gzh-preview"
             title={t.gzhPanelTitle}
             sandbox="allow-same-origin"
-            srcDoc={buildPreviewDoc(result.html)}
+            srcDoc={buildPreviewDoc(result.html, lang)}
           />
         </>
       )}
@@ -201,9 +245,9 @@ export default function GzhExportPanel() {
 }
 
 /** Minimal same-origin preview shell; `#gzh-content` is what gets copied. */
-function buildPreviewDoc(html: string): string {
+function buildPreviewDoc(html: string, lang: "en" | "zh"): string {
   return [
-    '<!DOCTYPE html><html><head><meta charset="utf-8">',
+    `<!DOCTYPE html><html lang="${lang === "zh" ? "zh-CN" : "en"}"><head><meta charset="utf-8">`,
     "<style>body{margin:0;background:#eef0f2;padding:18px 10px;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;}",
     "#gzh-stage{max-width:640px;margin:0 auto;}</style></head><body>",
     `<div id="gzh-stage"><div id="gzh-content">${html}</div></div>`,
@@ -215,9 +259,9 @@ function buildPreviewDoc(html: string): string {
  * Standalone downloadable preview page with a copy-to-clipboard toolbar
  * (ported from gzh-design-skill's wrap_preview template).
  */
-function buildStandalonePreview(title: string, html: string, copyLabel: string): string {
+function buildStandalonePreview(title: string, html: string, copyLabel: string, lang: "en" | "zh"): string {
   return `<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="${lang === "zh" ? "zh-CN" : "en"}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -234,10 +278,10 @@ function buildStandalonePreview(title: string, html: string, copyLabel: string):
 </head>
 <body>
 <div class="gzh-toolbar">
-  <span class="gzh-hint">👇 排版效果 · 点右侧按钮复制后直接粘到公众号</span>
-  <button class="gzh-copy" onclick="gzhCopy(this)">📋 ${escapeHtml(copyLabel)}</button>
+  <span class="gzh-hint">排版预览 · 点击右侧按钮复制，随后粘贴到公众号编辑器</span>
+  <button class="gzh-copy" onclick="gzhCopy(this)">${escapeHtml(copyLabel)}</button>
 </div>
-<div class="gzh-toast" id="gzhToast"></div>
+<div class="gzh-toast" id="gzhToast" aria-live="polite" aria-atomic="true"></div>
 <div class="gzh-stage"><div id="gzh-content">
 ${html}
 </div></div>
@@ -249,7 +293,9 @@ function gzhCopy(btn){
   var ok=false;try{ok=document.execCommand('copy');}catch(e){}
   sel.removeAllRanges();
   var t=document.getElementById('gzhToast');
-  t.textContent=ok?'✅ 已复制！去公众号编辑器 Ctrl/⌘+V 粘贴':'⚠ 复制失败，请手动全选复制';
+  t.setAttribute('role',ok?'status':'alert');
+  t.setAttribute('aria-live',ok?'polite':'assertive');
+  t.textContent=ok?'已复制。请在公众号编辑器中按 Ctrl/⌘+V 粘贴。':'复制失败，请手动全选内容后复制。';
   t.classList.add('show');setTimeout(function(){t.classList.remove('show');},2800);
 }
 </script>

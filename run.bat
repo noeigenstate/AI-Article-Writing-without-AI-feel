@@ -1,8 +1,8 @@
 @echo off
 REM ===========================================================================
 REM One-click launcher for Speak Plainly (Windows).
-REM Creates backend\.env on first run, installs dependencies, then opens the
-REM backend and frontend in two terminal windows.
+REM Creates backend\.env on first run, installs dependencies, then runs the
+REM backend and frontend together in this terminal.
 REM ===========================================================================
 setlocal
 cd /d "%~dp0"
@@ -14,6 +14,19 @@ if errorlevel 1 (
   exit /b 1
 )
 
+echo - Closing previous Speak Plainly services...
+call "%~dp0stop.bat" >nul 2>nul
+
+for /f "usebackq delims=" %%P in (`node "%~dp0scripts\find-open-port.mjs" 51773`) do set "FRONTEND_PORT=%%P"
+if not defined FRONTEND_PORT (
+  echo [X] Could not find an available frontend port.
+  exit /b 1
+)
+if not "%FRONTEND_PORT%"=="51773" (
+  echo - Port 51773 is occupied; using %FRONTEND_PORT% instead.
+)
+set "CORS_ORIGINS=http://127.0.0.1:%FRONTEND_PORT%,http://localhost:%FRONTEND_PORT%"
+
 if not exist "backend\.env" (
   echo - backend\.env not found - creating it from .env.example
   copy /Y "backend\.env.example" "backend\.env" >nul
@@ -21,10 +34,15 @@ if not exist "backend\.env" (
   echo            ^(Article generation needs a key; the AI-smell score works offline.^)
 )
 
-if not exist "backend\node_modules" (
+if not exist "backend\node_modules\.bin\concurrently.cmd" (
   echo - Installing backend dependencies...
   pushd backend
   call npm install
+  if errorlevel 1 (
+    popd
+    echo [X] Backend dependency installation failed.
+    exit /b 1
+  )
   popd
 )
 
@@ -32,15 +50,36 @@ if not exist "frontend\node_modules" (
   echo - Installing frontend dependencies...
   pushd frontend
   call npm install
+  if errorlevel 1 (
+    popd
+    echo [X] Frontend dependency installation failed.
+    exit /b 1
+  )
   popd
 )
 
-echo Starting backend  -^> http://localhost:8787
-start "Speak Plainly - backend" /D "%~dp0backend" cmd /k npm start
-
-echo Starting frontend (dev server URL is shown in its window)
-start "Speak Plainly - frontend" /D "%~dp0frontend" cmd /k npm run dev
-
 echo.
-echo Two windows opened (backend + frontend). Close them or run stop.bat to stop the servers.
-endlocal
+echo Starting Speak Plainly in this terminal...
+echo Waiting for the frontend and backend to become ready...
+echo.
+
+REM Node 24+ can route built-in fetch/http traffic through HTTP_PROXY / HTTPS_PROXY.
+REM Keep external research on that proxy, but never proxy local health/API traffic.
+set "NODE_USE_ENV_PROXY=1"
+if defined NO_PROXY (
+  set "NO_PROXY=localhost,127.0.0.1,%NO_PROXY%"
+) else (
+  set "NO_PROXY=localhost,127.0.0.1"
+)
+
+call "%~dp0backend\node_modules\.bin\concurrently.cmd" ^
+  --kill-others-on-fail ^
+  --names "backend,frontend,ready" ^
+  --prefix "[{name}]" ^
+  --prefix-colors "cyan,magenta,green" ^
+  "npm --silent --prefix backend start" ^
+  "npm --silent --prefix frontend run dev" ^
+  "node scripts/wait-for-dev.mjs"
+
+set "SP_EXIT=%ERRORLEVEL%"
+endlocal & exit /b %SP_EXIT%

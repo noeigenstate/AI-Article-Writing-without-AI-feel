@@ -1,0 +1,215 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-12T05:44:22.8112629-04:00",
+  "title": "Design System: Speak Plainly",
+  "extensions": {
+    "colorMeta": {
+      "canvas": {
+        "role": "neutral",
+        "displayName": "Cold Canvas",
+        "canonical": "#e8ebe5",
+        "tonalRamp": ["#24312f", "#45524f", "#68736f", "#8d9691", "#b2b9b4", "#d2d7d1", "#e8ebe5", "#f7f8f5"]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Working Paper",
+        "canonical": "#f8f9f4",
+        "tonalRamp": ["#25312e", "#48534f", "#6d7771", "#929a94", "#b8beb8", "#d8dcd6", "#f0f2ed", "#f8f9f4"]
+      },
+      "paper-strong": {
+        "role": "neutral",
+        "displayName": "Galley White",
+        "canonical": "#ffffff",
+        "tonalRamp": ["#26312f", "#4a5551", "#6f7974", "#969e98", "#bdc3be", "#dde0dc", "#f2f4f0", "#ffffff"]
+      },
+      "rail": {
+        "role": "neutral",
+        "displayName": "Editorial Rail",
+        "canonical": "#0a2926",
+        "tonalRamp": ["#041715", "#0a2926", "#17413d", "#315b56", "#587b75", "#86a49e", "#bfd2cd", "#edf5f2"]
+      },
+      "ink-strong": {
+        "role": "neutral",
+        "displayName": "Proof Ink",
+        "canonical": "#0b2422",
+        "tonalRamp": ["#041311", "#0b2422", "#183d39", "#315853", "#587972", "#86a39b", "#bfd2cc", "#edf5f2"]
+      },
+      "coral": {
+        "role": "primary",
+        "displayName": "Fluorescent Proof Coral",
+        "canonical": "#ff6542",
+        "tonalRamp": ["#3b0c05", "#68180c", "#982a17", "#c84025", "#ef5837", "#ff876d", "#ffb9a8", "#ffe5dc"]
+      },
+      "cyan": {
+        "role": "secondary",
+        "displayName": "Metadata Cyan",
+        "canonical": "#9fd6d1",
+        "tonalRamp": ["#09211f", "#123d3a", "#1f5b57", "#397b76", "#649e98", "#9fd6d1", "#c4e8e4", "#e1f3f0"]
+      },
+      "good": {
+        "role": "tertiary",
+        "displayName": "Proof Status Green",
+        "canonical": "#16765f",
+        "tonalRamp": ["#052018", "#0a3a2d", "#105541", "#16765f", "#32947a", "#68b79f", "#a8d9c8", "#e2f3ec"]
+      },
+      "warn": {
+        "role": "tertiary",
+        "displayName": "Proof Status Amber",
+        "canonical": "#945806",
+        "tonalRamp": ["#291600", "#4a2900", "#6d3f02", "#945806", "#b97920", "#d9a45a", "#efd09e", "#fff0d3"]
+      },
+      "bad": {
+        "role": "tertiary",
+        "displayName": "Proof Status Red",
+        "canonical": "#b8322b",
+        "tonalRamp": ["#330805", "#5c1310", "#87211d", "#b8322b", "#d8574e", "#ed8b83", "#f7bbb6", "#fde8e5"]
+      }
+    },
+    "typographyMeta": {
+      "display-en": {
+        "displayName": "English Display",
+        "purpose": "Oversized hero headlines, folios, indices, and tabular editorial numerals."
+      },
+      "display-zh": {
+        "displayName": "Chinese Display",
+        "purpose": "Compressed Chinese headings and bilingual brand detail."
+      },
+      "ui": {
+        "displayName": "Bilingual UI",
+        "purpose": "Controls, workflow labels, metadata, and operational copy."
+      },
+      "reading": {
+        "displayName": "Reading Serif",
+        "purpose": "Long-form galley copy where a serif reading voice is appropriate."
+      }
+    },
+    "shadows": [
+      {
+        "name": "paper",
+        "value": "0 18px 44px rgba(15, 42, 39, 0.13), 0 3px 10px rgba(15, 42, 39, 0.06)",
+        "purpose": "Separates the authored document galley from the cold canvas."
+      },
+      {
+        "name": "float",
+        "value": "0 24px 70px rgba(4, 29, 27, 0.22), 0 4px 16px rgba(4, 29, 27, 0.12)",
+        "purpose": "Lifts only the focused sentence-rewrite popover above its modal layer."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state-standard",
+        "value": "160ms ease",
+        "purpose": "Direct background, text, and border changes on interactive controls."
+      },
+      {
+        "name": "sentence-state",
+        "value": "130ms ease",
+        "purpose": "Fast proof highlighting for editable sentence spans."
+      },
+      {
+        "name": "progress-ledger",
+        "value": "550ms ease",
+        "purpose": "Advances the progress fill without implying exact mechanical timing."
+      },
+      {
+        "name": "proof-reveal",
+        "value": "620ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Runs the single clipped opening-headline reveal; reduced-motion collapses it to 0.01ms."
+      }
+    ],
+    "breakpoints": [
+      { "name": "wide-compact", "value": "1120px" },
+      { "name": "masthead", "value": "900px" },
+      { "name": "mobile", "value": "620px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Runs the authorship-changing action at the current proof step.",
+      "html": "<button class='ds-btn-primary' type='button'><svg viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='M12 2.75 13.55 8.45 19.25 10 13.55 11.55 12 17.25 10.45 11.55 4.75 10l5.7-1.55L12 2.75Z'/><path d='m18.5 15 .7 2.3 2.3.7-2.3.7-.7 2.3-.7-2.3-2.3-.7 2.3-.7.7-2.3Z'/></svg><span>Generate article</span></button>",
+      "css": ".ds-btn-primary{display:inline-flex;align-items:center;justify-content:center;gap:9px;min-height:42px;padding:9px 15px;border:1px solid var(--coral,#ff6542);border-radius:var(--radius-small,2px);background:var(--coral,#ff6542);color:#191e1d;font-family:var(--ui,\"Segoe UI\",sans-serif);font-size:15px;font-weight:700;cursor:pointer;transition:background-color 160ms ease,color 160ms ease,border-color 160ms ease}.ds-btn-primary svg{width:1.15em;height:1.15em;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:square;stroke-linejoin:miter}.ds-btn-primary:hover{border-color:var(--coral-dark,#b93820);background:var(--coral-dark,#b93820);color:#fffaf6}.ds-btn-primary:focus-visible{outline:3px solid var(--cyan-dark,#176a67);outline-offset:3px}.ds-btn-primary:disabled{border-color:transparent;background:#d8ddd7;color:#7b8884;cursor:not-allowed}"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Keeps restart and secondary actions available without competing with the proof action.",
+      "html": "<button class='ds-btn-ghost' type='button'>Start over</button>",
+      "css": ".ds-btn-ghost{min-height:36px;padding:9px 15px;border:1px solid transparent;border-radius:var(--radius-small,2px);background:transparent;color:var(--muted,#596b67);font-family:var(--ui,\"Segoe UI\",sans-serif);font-size:15px;font-weight:700;cursor:pointer;transition:background-color 160ms ease,color 160ms ease,border-color 160ms ease}.ds-btn-ghost:hover{background:var(--paper-muted,#eef1eb);color:var(--ink-strong,#0b2422)}.ds-btn-ghost:focus-visible{outline:3px solid var(--cyan-dark,#176a67);outline-offset:3px}.ds-btn-ghost:active{background:var(--cyan-soft,#e1f3f0)}"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "text-input",
+      "description": "Collects a title or custom domain on a ruled galley-white field.",
+      "html": "<label class='ds-input-label' for='ds-title'>Article title</label><input class='ds-text-input' id='ds-title' type='text' placeholder='Enter a working title'>",
+      "css": ".ds-input-label{display:block;margin-bottom:8px;color:var(--muted,#596b67);font-family:var(--ui,\"Segoe UI\",sans-serif);font-size:12.5px;font-weight:700}.ds-text-input{width:100%;min-height:48px;padding:11px 14px;border:1px solid rgba(11,36,34,.54);border-radius:var(--radius-small,2px);background:var(--paper-strong,#fff);color:var(--ink-strong,#0b2422);font-family:var(--ui,\"Segoe UI\",sans-serif);font-size:15px}.ds-text-input::placeholder{color:var(--muted,#596b67);opacity:1}.ds-text-input:hover{border-color:rgba(11,36,34,.54)}.ds-text-input:focus{border-color:var(--cyan-dark,#176a67)}.ds-text-input:focus-visible{outline:3px solid var(--cyan-dark,#176a67);outline-offset:3px}"
+    },
+    {
+      "name": "Segmented Length Control",
+      "kind": "custom",
+      "refersTo": "segmented-length-control",
+      "description": "Chooses one of three article lengths within a single editorial rule.",
+      "html": "<div class='ds-segment' role='group' aria-label='Article length'><button type='button'>Regular</button><button class='ds-segment-active' type='button' aria-pressed='true'>Short</button><button type='button'>Long</button></div>",
+      "css": ".ds-segment{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid rgba(11,36,34,.54);background:var(--paper-strong,#fff)}.ds-segment button{min-width:0;min-height:42px;padding:7px 8px;border:0;border-right:1px solid rgba(11,36,34,.19);border-radius:0;background:transparent;color:var(--muted,#596b67);font-family:var(--ui,\"Segoe UI\",sans-serif);font-size:12.5px;cursor:pointer}.ds-segment button:last-child{border-right:0}.ds-segment button:hover:not(.ds-segment-active){background:transparent;color:var(--muted,#596b67)}.ds-segment button.ds-segment-active{background:var(--rail,#0a2926);color:#f7faf5}.ds-segment button:focus-visible{position:relative;z-index:1;outline:3px solid var(--cyan-dark,#176a67);outline-offset:3px}"
+    },
+    {
+      "name": "Sidebar Navigation Item",
+      "kind": "nav",
+      "refersTo": "sidebar-navigation-item",
+      "description": "Pairs a folio index and line icon with a square coral active proof mark.",
+      "html": "<nav class='ds-side-nav' aria-label='Writing tools'><button class='ds-side-item ds-side-item-active' type='button' aria-current='page'><span class='ds-side-index' aria-hidden='true'>01</span><svg viewBox='0 0 24 24' aria-hidden='true' focusable='false'><path d='M6 2.75h8l4 4v14.5H6zM14 2.75v4h4M8.5 11l1.3 6 2.2-4.25L14.2 17l1.3-6'/></svg><span>Rewrite Word</span></button></nav>",
+      "css": ".ds-side-nav{padding:10px;background:var(--rail,#0a2926)}.ds-side-item{position:relative;display:grid;grid-template-columns:24px 20px minmax(0,1fr);align-items:center;gap:9px;width:100%;min-height:48px;padding:9px 10px;border:1px solid transparent;border-radius:var(--radius-small,2px);background:transparent;color:#dce7e3;font-family:var(--ui,\"Segoe UI\",sans-serif);font-size:14px;font-weight:650;text-align:left;cursor:pointer}.ds-side-item svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:square;stroke-linejoin:miter}.ds-side-index{color:#77918b;font-family:var(--display-en,\"Barlow Condensed\",sans-serif);font-size:15px;font-weight:700}.ds-side-item:hover{border-color:rgba(244,247,242,.16);background:var(--rail-raised,#123632);color:#fff}.ds-side-item:focus-visible{outline:3px solid var(--coral,#ff6542);outline-offset:3px}.ds-side-item-active{border-color:rgba(255,101,66,.42);background:rgba(255,101,66,.1);color:var(--coral,#ff6542)}.ds-side-item-active .ds-side-index{color:var(--coral,#ff6542)}.ds-side-item-active::after{content:'';position:absolute;right:10px;width:7px;height:7px;background:var(--coral,#ff6542)}"
+    },
+    {
+      "name": "Research Ledger Row",
+      "kind": "custom",
+      "refersTo": "research-ledger-row",
+      "description": "Keeps source type, date, and title scan-friendly in the visible evidence ledger.",
+      "html": "<a class='ds-research-row' href='#'><span class='ds-research-index' aria-hidden='true'>01</span><span class='ds-research-meta'>Publisher · web article</span><time class='ds-research-date' datetime='2026-08-12'>8/12/2026</time><strong class='ds-research-title'>A source-backed working headline</strong></a>",
+      "css": ".ds-research-row{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:2px 8px;align-items:baseline;padding:10px 0;border-top:1px solid rgba(11,36,34,.54);border-bottom:1px solid rgba(11,36,34,.19);color:var(--ink,#29403d);font-family:var(--ui,\"Segoe UI\",sans-serif);text-decoration:none}.ds-research-index{grid-row:1/3;color:var(--muted,#596b67);font-family:var(--display-en,\"Barlow Condensed\",sans-serif);font-size:15px;font-weight:700}.ds-research-meta,.ds-research-date{color:var(--cyan-dark,#176a67);font-size:11.5px}.ds-research-date{font-variant-numeric:tabular-nums}.ds-research-title{grid-column:2/4;min-width:0;overflow:hidden;color:var(--ink-strong,#0b2422);font-size:12.5px;font-weight:650;line-height:1.45;text-overflow:ellipsis;white-space:nowrap}.ds-research-row:hover .ds-research-title{color:var(--coral-dark,#b93820)}.ds-research-row:focus-visible{outline:3px solid var(--cyan-dark,#176a67);outline-offset:3px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Editorial Proof Desk / 编辑部校样台",
+    "overview": "Speak Plainly feels like a magazine copy desk laid out for active work: a deep editorial rail frames cool paper, fluorescent proof marks identify decisive actions, and cyan metadata keeps evidence visible without competing with the draft. The interface is calm, literate, information-dense, and deliberately low-depth.\n\nAuthorship and evidence share one proof surface. Folio labels, hairline rules, crop marks, compressed headlines, ledger rows, and a white document galley make the application read as a working publication rather than a generic AI dashboard.",
+    "keyCharacteristics": [
+      "Magazine flatplan structure with folio numbers, crop marks, and ruled sections.",
+      "Deep ink-green fields, cool paper neutrals, fluorescent coral proofing, and cyan metadata.",
+      "Compressed display type paired with dependable bilingual controls and a reading-serif galley token.",
+      "Square, low-depth controls whose state changes carry more weight than decoration."
+    ],
+    "rules": [
+      {
+        "name": "The Proof Mark Rule",
+        "body": "Coral identifies authorship-changing actions and active editorial state; cyan identifies evidence, focus, metadata, and progress.",
+        "section": "colors"
+      },
+      {
+        "name": "The Copy-Fit Rule",
+        "body": "Use condensed display type for hierarchy and folio rhythm, not for paragraphs or control copy; long-form text retains a readable 72ch maximum.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat Proof Rule",
+        "body": "Do not use card shadows for grouping; reserve elevation for the authored sheet and the focused rewrite layer.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do keep authorship actions coral and evidence or focus states cyan.",
+      "Do use broad ruled regions, folio numbers, and tonal paper fields to organize dense workflows.",
+      "Do keep the document galley readable at no more than 72ch and let long content grow vertically.",
+      "Do preserve visible keyboard focus, reduced-motion behavior, and the single-column task order at narrow widths."
+    ],
+    "donts": [
+      "Don't return to pastel gradients, stacked rounded cards, glass panels, or generic AI-dashboard decoration.",
+      "Don't distribute shadows across routine controls or workflow regions.",
+      "Don't round editorial grids, ruled rows, document previews, or registration marks into pills.",
+      "Don't use coral for metadata or cyan for the primary authorship action."
+    ]
+  }
+}

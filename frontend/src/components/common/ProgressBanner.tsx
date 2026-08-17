@@ -35,7 +35,10 @@ export default function ProgressBanner({ busy, lang, progress }: ProgressBannerP
   }, [progress.startedAt, progress.task]);
 
   return (
-    <div className="banner busy progress-banner" role="status" aria-live="polite">
+    <div className="banner busy progress-banner">
+      <span className="sr-only" role="status" aria-live="polite">
+        {busy}: {stepLabel}
+      </span>
       <div className="progress-topline">
         <span>{busy}</span>
         <strong>{percentText}</strong>
@@ -43,12 +46,13 @@ export default function ProgressBanner({ busy, lang, progress }: ProgressBannerP
       <div
         className="progress-track"
         role="progressbar"
+        aria-label={busy}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={snapshot.percent}
         aria-valuetext={`${stepLabel} ${percentText}`}
       >
-        <span className="progress-fill" style={{ width: `${snapshot.percent}%` }} />
+        <span className="progress-fill" style={{ transform: `scaleX(${snapshot.percent / 100})` }} />
       </div>
       <div className="progress-step">{stepLabel}</div>
       <ol className="progress-log">

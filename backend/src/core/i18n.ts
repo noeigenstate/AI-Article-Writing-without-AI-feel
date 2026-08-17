@@ -22,10 +22,22 @@ type Bi = { en: string; zh: string };
 /** API 错误信息 / API error messages */
 export const SERVER_MESSAGES = {
   missingTopic: { en: "Missing topic.", zh: "缺少选题 topic" },
+  invalidTopic: {
+    en: "Invalid topic; provide a title or a generated topic option.",
+    zh: "选题格式无效，请提供标题或重新选择一个生成的选题",
+  },
+  invalidArticleOutput: {
+    en: "The model returned an incomplete article after an automatic retry. Please try again.",
+    zh: "模型返回的文章不完整，系统已自动重试一次，请重新生成",
+  },
   missingTitle: { en: "Missing article title.", zh: "缺少文章标题 title" },
   titleTooLong: {
     en: "Title is too long; keep it under 120 characters.",
     zh: "标题太长，请控制在 120 字以内",
+  },
+  invalidTargetLength: {
+    en: "Invalid targetLength; use short, medium, or long.",
+    zh: "targetLength 无效，请使用 short、medium 或 long",
   },
   missingFile: { en: "Missing target file (field: file).", zh: "缺少目标文件 file" },
   docNotFound: { en: "Document not found or expired.", zh: "文档不存在或已过期" },

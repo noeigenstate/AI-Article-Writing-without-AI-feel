@@ -52,7 +52,7 @@ function Gauge({ s, label }: { s: AiScoreDTO; label?: string }) {
       {label && <span className="score-label">{label}</span>}
       <span className={`score-num lvl-${s.level}`}>{s.score}</span>
       <span className="score-track">
-        <span className={`score-fill lvl-${s.level}`} style={{ width: `${s.score}%` }} />
+        <span className={`score-fill lvl-${s.level}`} style={{ transform: `scaleX(${s.score / 100})` }} />
       </span>
     </div>
   );

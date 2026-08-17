@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { useStore } from "../../lib/store.js";
 import { messages } from "../../lib/i18n.js";
@@ -35,6 +35,10 @@ export default function RewritePopover({
   const [edit, setEdit] = useState(original);
   const [err, setErr] = useState<string | null>(null);
   const [progressStartedAt] = useState(() => Date.now());
+  const headingId = useId();
+  const originalId = useId();
+  const manualEditId = useId();
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     let alive = true;
@@ -49,26 +53,60 @@ export default function RewritePopover({
   }, []);
 
   useEffect(() => {
+    closeButtonRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  function keepFocusInside(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(
+      event.currentTarget.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+      )
+    );
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
   const style = floatingStyle(anchor);
 
   return (
     <div className="popover-layer">
-      <div className="popover floating-popover" style={style}>
+      <div
+        className="popover floating-popover"
+        style={style}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={headingId}
+        aria-describedby={originalId}
+        onKeyDown={keepFocusInside}
+      >
         <div className="popover-head">
-          <span>{heading}</span>
-          <button className="link" onClick={onClose}>
+          <span id={headingId}>{heading}</span>
+          <button ref={closeButtonRef} type="button" className="link" onClick={onClose}>
             {t.close}
           </button>
         </div>
 
-        <div className="orig">{t.originalLabel}{original}</div>
+        <div id={originalId} className="orig">{t.originalLabel}{original}</div>
 
         <div className="alts">
           {loading &&
@@ -81,11 +119,11 @@ export default function RewritePopover({
             ) : (
               <div className="hint">{t.loadingCandidates}</div>
             ))}
-          {err && <div className="error">{err}</div>}
+          {err && <div className="error" role="alert">{err}</div>}
           {!loading &&
             !err &&
             alts.map((a, i) => (
-              <button key={i} className="alt" onClick={() => onAdopt(a)}>
+              <button key={i} type="button" className="alt" onClick={() => onAdopt(a)}>
                 {a}
               </button>
             ))}
@@ -95,10 +133,10 @@ export default function RewritePopover({
         </div>
 
         <div className="edit-area">
-          <label>{t.manualEdit}</label>
-          <textarea value={edit} onChange={(e) => setEdit(e.target.value)} rows={3} />
+          <label htmlFor={manualEditId}>{t.manualEdit}</label>
+          <textarea id={manualEditId} value={edit} onChange={(e) => setEdit(e.target.value)} rows={3} />
           <div className="row-end">
-            <button className="primary" onClick={() => onAdopt(edit)}>
+            <button type="button" className="primary" onClick={() => onAdopt(edit)}>
               {t.adopt}
             </button>
           </div>

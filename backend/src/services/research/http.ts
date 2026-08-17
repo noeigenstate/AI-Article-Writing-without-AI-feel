@@ -31,14 +31,14 @@ export async function fetchTextWithTimeout(
 
   try {
     const res = await fetch(input, { ...init, signal: controller.signal });
-    const text = await readLimitedText(res, options.maxBytes);
+    const text = await readLimitedText(res, options.maxBytes, controller);
     return { ok: res.ok, status: res.status, text };
   } catch (error) {
-    if (isAbortError(error)) {
-      throw new Error(`${options.label} 请求超时`);
-    }
     if (error instanceof ResponseTooLargeError) {
       throw new Error(`${options.label} 响应过大`);
+    }
+    if (isAbortError(error)) {
+      throw new Error(`${options.label} 请求超时`);
     }
     throw error;
   } finally {
@@ -48,22 +48,65 @@ export async function fetchTextWithTimeout(
 
 class ResponseTooLargeError extends Error {}
 
-/** Read a response as text, rejecting if it exceeds `maxBytes`. */
-async function readLimitedText(res: Response, maxBytes: number): Promise<string> {
+/**
+ * Stream and decode a response, stopping as soon as the decoded body crosses
+ * `maxBytes`. Fetch transparently decodes content encodings before exposing
+ * `res.body`, so the counter bounds the bytes the application actually reads.
+ */
+async function readLimitedText(res: Response, maxBytes: number, controller: AbortController): Promise<string> {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) {
+    throw new TypeError("maxBytes must be a non-negative safe integer");
+  }
+
   const contentLength = Number(res.headers.get("content-length") ?? 0);
   if (contentLength > maxBytes) {
+    await cancelResponseBody(res, controller);
     throw new ResponseTooLargeError();
   }
 
-  const text = await res.text();
-  if (Buffer.byteLength(text, "utf8") > maxBytes) {
-    throw new ResponseTooLargeError();
-  }
+  if (!res.body) return "";
 
-  return text;
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  const parts: string[] = [];
+  let bytesRead = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+
+      bytesRead += value.byteLength;
+      if (bytesRead > maxBytes) {
+        try {
+          await reader.cancel("response body exceeded configured limit");
+        } catch {
+          // The size error remains authoritative even if transport teardown fails.
+        }
+        controller.abort();
+        throw new ResponseTooLargeError();
+      }
+      parts.push(decoder.decode(value, { stream: true }));
+    }
+    parts.push(decoder.decode());
+    return parts.join("");
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+/** Cancel an unread/partially-read body and its request without masking the size error. */
+async function cancelResponseBody(res: Response, controller: AbortController): Promise<void> {
+  try {
+    await res.body?.cancel("response body exceeded configured limit");
+  } catch {
+    // Best-effort transport teardown.
+  }
+  controller.abort();
 }
 
 /** True if the error is a fetch abort (timeout). */
 function isAbortError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === "AbortError";
+  return error instanceof Error && error.name === "AbortError";
 }

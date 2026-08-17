@@ -27,11 +27,13 @@ export function shortDate(value: string): string {
  * @returns The trimmed, possibly ellipsized string.
  */
 export function truncate(value: string, maxLength: number): string {
-  const text = value.replace(/\s+/g, " ").trim();
-  if (text.length <= maxLength) {
+  if (maxLength <= 0) return "";
+  const text = replaceInvalidUnicode(value).replace(/\s+/g, " ").trim();
+  const characters = Array.from(text);
+  if (characters.length <= maxLength) {
     return text;
   }
-  return `${text.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+  return `${characters.slice(0, Math.max(0, maxLength - 1)).join("").trimEnd()}…`;
 }
 
 /**
@@ -41,11 +43,34 @@ export function truncate(value: string, maxLength: number): string {
  * @returns XML-escaped text.
  */
 export function escapeSvg(value: string): string {
-  return value
+  return replaceInvalidUnicode(value)
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/gu, "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+/** Replace lone UTF-16 surrogates so URI/XML serialization cannot throw. */
+function replaceInvalidUnicode(value: string): string {
+  let output = "";
+  for (let index = 0; index < value.length; index += 1) {
+    const unit = value.charCodeAt(index);
+    if (unit >= 0xd800 && unit <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        output += value[index] + value[index + 1];
+        index += 1;
+      } else {
+        output += "�";
+      }
+    } else if (unit >= 0xdc00 && unit <= 0xdfff) {
+      output += "�";
+    } else {
+      output += value[index];
+    }
+  }
+  return output;
 }
 
 /**
