@@ -1548,7 +1548,6 @@ button.link:hover {
   margin: 28px auto;
 }
 
-.doc-figure h2,
 .doc-table-wrap h2,
 .doc-references h2 {
   margin: 0 0 12px;
@@ -1556,10 +1555,144 @@ button.link:hover {
 
 .doc-figure img {
   display: block;
-  width: 100%;
+  width: auto;
+  height: auto;
+  max-width: 100%;
   max-height: 440px;
   object-fit: contain;
+}
+
+.doc-figure-media-image,
+.doc-figure-media-gif {
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-block: 1px solid var(--line);
+  isolation: isolate;
+}
+
+.doc-figure-media-image {
+  background: transparent;
+}
+
+.doc-figure-source-image {
+  margin-inline: auto;
+}
+
+.doc-figure .doc-figure-gif-animated {
+  grid-area: 1 / 1;
+  position: relative;
+  z-index: 1;
+}
+
+.doc-gif-idle {
+  display: grid;
+  width: 100%;
+  min-height: 118px;
+  gap: 5px;
+  align-content: center;
+  padding-block: 24px;
+  padding-inline: 18px 148px;
   background: var(--paper-muted);
+  color: var(--ink);
+  font-family: var(--ui);
+}
+
+.doc-gif-idle strong {
+  color: var(--ink-strong);
+  font-size: 14px;
+}
+
+.doc-gif-idle > span:not(.doc-gif-motion-note) {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.doc-figure-media-gif[data-gif-state="reduced"] .doc-gif-idle {
+  padding-inline-end: 18px;
+}
+
+.doc-media-kind {
+  position: absolute;
+  z-index: 3;
+  inset-block-start: 10px;
+  inset-inline-end: 10px;
+  min-height: 22px;
+  padding: 4px 7px 3px;
+  border: 1px solid rgba(255, 255, 255, 0.56);
+  border-radius: var(--radius-small);
+  background: rgba(10, 41, 38, 0.9);
+  background: color-mix(in srgb, var(--rail) 90%, transparent);
+  color: var(--paper-strong);
+  font-family: var(--ui);
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1;
+  letter-spacing: 0.09em;
+}
+
+.doc-gif-control {
+  position: absolute;
+  z-index: 3;
+  inset-inline-end: 10px;
+  inset-block-end: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 8px 11px;
+  border-color: rgba(255, 255, 255, 0.48);
+  background: var(--rail);
+  color: var(--paper-strong);
+  font-family: var(--ui);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.doc-gif-control:hover {
+  border-color: var(--cyan);
+  background: var(--rail-raised);
+  color: #fff;
+}
+
+.doc-gif-control[aria-pressed="true"] {
+  border-color: var(--cyan);
+  background: var(--cyan-dark);
+}
+
+.doc-gif-control:focus-visible {
+  outline-color: var(--coral);
+}
+
+.doc-gif-control-icon {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  fill: currentColor;
+}
+
+.doc-gif-motion-note {
+  margin-top: 5px;
+  color: var(--cyan-dark);
+  font-family: var(--ui);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+.doc-figure-media-gif[data-gif-state="error"] {
+  border-color: var(--bad);
+}
+
+.doc-gif-status {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--bad) 42%, transparent);
+  background: color-mix(in srgb, var(--bad) 8%, var(--paper-strong));
+  color: var(--bad);
+  font-family: var(--ui);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .doc-figure figcaption,
@@ -1567,6 +1700,30 @@ button.link:hover {
   margin: 9px 0 0;
   color: var(--muted);
   font-size: 12px;
+}
+
+.doc-figure figcaption {
+  display: grid;
+  gap: 5px;
+}
+
+.doc-figure-source {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 7px;
+  align-items: baseline;
+  color: var(--cyan-dark);
+  font-family: var(--ui);
+}
+
+.doc-figure-source a {
+  overflow-wrap: anywhere;
+}
+
+.doc-source-ref {
+  color: var(--cyan-dark);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
 }
 
 .doc-figure a,
@@ -1912,6 +2069,17 @@ footer.hint {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+
+  .doc-gif-control {
+    display: none;
+  }
+}
+
+@media print {
+  .doc-figure-media-gif,
+  .doc-gif-status {
+    display: none;
   }
 }
 
@@ -2283,6 +2451,17 @@ footer.hint {
 
   .doc-actions button {
     flex: 1;
+  }
+
+  .doc-gif-idle {
+    min-height: 166px;
+    padding-block: 48px 72px;
+    padding-inline: 18px;
+  }
+
+  .doc-gif-control {
+    inset-inline: 18px;
+    justify-content: center;
   }
 
   .compare-doc {

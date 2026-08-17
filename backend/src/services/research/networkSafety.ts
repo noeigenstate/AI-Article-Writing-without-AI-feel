@@ -1,9 +1,14 @@
 import { lookup as dnsLookup } from "node:dns/promises";
-import { request as httpRequest, type IncomingHttpHeaders } from "node:http";
+import {
+  request as httpRequest,
+  type IncomingHttpHeaders,
+} from "node:http";
 import { request as httpsRequest, type RequestOptions } from "node:https";
 import { BlockList, isIP } from "node:net";
 
 const DEFAULT_MAX_REDIRECTS = 4;
+const URL_CONTROL_CHARACTERS = /\p{Cc}/u;
+const URL_ENCODED_CONTROL_CHARACTERS = /%(?:0[0-9a-f]|1[0-9a-f]|7f|8[0-9a-f]|9[0-9a-f]|c2%(?:8[0-9a-f]|9[0-9a-f]))/iu;
 
 const BLOCKED_HOSTNAMES = new Set([
   "localhost",
@@ -100,10 +105,38 @@ type OpenTransport = (
   signal: AbortSignal
 ) => Promise<SafeTransportResponse>;
 
+interface NativeRequestResponse extends AsyncIterable<Uint8Array> {
+  statusCode?: number;
+  headers: IncomingHttpHeaders;
+  destroy: () => void;
+}
+
+interface NativeRequestHandle {
+  setHeader: (name: string, value: string) => void;
+  once: (event: "error", listener: (error: Error) => void) => NativeRequestHandle;
+  end: () => void;
+}
+
+type OpenNativeRequest = (
+  url: URL,
+  options: RequestOptions,
+  onResponse: (response: NativeRequestResponse) => void
+) => NativeRequestHandle;
+
+export interface PinnedRequestPlan {
+  /** The actual network endpoint. Its hostname is always the DNS-vetted IP. */
+  url: URL;
+  /** Options intentionally omit `agent`, so Node's current global proxy agent remains active. */
+  options: RequestOptions;
+  /** The canonical origin Host header, installed only after proxy routing is fixed to `url`. */
+  hostHeader: string;
+}
+
 /** Dependency hooks are exported only so the security boundary can be tested without real network access. */
 export interface NetworkSafetyTestDependencies {
   lookup?: LookupHost;
   transport?: OpenTransport;
+  nativeRequest?: OpenNativeRequest;
 }
 
 export class OutboundUrlPolicyError extends Error {
@@ -142,6 +175,44 @@ export function isBlockedOutboundAddress(value: string): boolean {
     return blockedAddresses.check(address, "ipv6");
   }
   return true;
+}
+
+/**
+ * Normalize one source-page URL without performing DNS or network I/O.
+ *
+ * Research parsers use this boundary for untrusted provider/feed output. It
+ * accepts only credential-free public HTTP(S) URLs on the standard ports and
+ * rejects localhost plus private/reserved IP literals. A trusted feed URL may
+ * be supplied as the base for a relative RSS/Atom link; the resolved target is
+ * subjected to the same policy.
+ */
+export function normalizePublicSourceUrl(
+  value: string | undefined,
+  baseUrl?: string
+): string | undefined {
+  if (!value || hasUnsafeUrlCharacters(value) || (baseUrl && hasUnsafeUrlCharacters(baseUrl))) {
+    return undefined;
+  }
+
+  try {
+    const url = baseUrl ? new URL(value, baseUrl) : new URL(value);
+    if (
+      (url.protocol !== "http:" && url.protocol !== "https:")
+      || !url.hostname
+      || url.username
+      || url.password
+      || url.port
+    ) {
+      return undefined;
+    }
+
+    const hostname = normalizeHostname(url.hostname);
+    if (!hostname || isBlockedOutboundHostname(hostname)) return undefined;
+    if (isIP(hostname) !== 0 && isBlockedOutboundAddress(hostname)) return undefined;
+    return url.toString();
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -207,7 +278,10 @@ export async function fetchBinaryWithOutboundPolicy(
 ): Promise<SafeFetchResult> {
   assertFetchBounds(options);
   const lookupHost = dependencies.lookup ?? defaultLookupHost;
-  const transport = dependencies.transport ?? openNativeTransport;
+  const transport = dependencies.transport ?? (
+    (url, address, headers, signal) =>
+      openNativeTransport(url, address, headers, signal, dependencies.nativeRequest)
+  );
   const maxRedirects = options.maxRedirects ?? DEFAULT_MAX_REDIRECTS;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), options.timeoutMs);
@@ -249,7 +323,11 @@ export async function fetchBinaryWithOutboundPolicy(
         if (redirectCount >= maxRedirects) {
           throw new OutboundUrlPolicyError("出站请求重定向次数过多");
         }
-        current = new URL(location, validated.url);
+        const next = new URL(location, validated.url);
+        if (validated.url.protocol === "https:" && next.protocol === "http:") {
+          throw new OutboundUrlPolicyError("HTTPS redirects must not downgrade to HTTP");
+        }
+        current = next;
         continue;
       }
 
@@ -312,22 +390,15 @@ async function openNativeTransport(
   url: URL,
   address: ResolvedAddress,
   headers: Readonly<Record<string, string>>,
-  signal: AbortSignal
+  signal: AbortSignal,
+  requestOverride?: OpenNativeRequest
 ): Promise<SafeTransportResponse> {
   return new Promise((resolve, reject) => {
-    const request = url.protocol === "https:" ? httpsRequest : httpRequest;
-    const requestOptions: RequestOptions = {
-      method: "GET",
-      // Keep the security transport independent from Node's environment-proxy
-      // global agents: the request must connect to the DNS-vetted, pinned IP.
-      agent: false,
-      headers,
-      family: address.family,
-      servername: isIP(normalizeHostname(url.hostname)) === 0 ? normalizeHostname(url.hostname) : undefined,
-      signal,
-      lookup: (_hostname, _options, callback) => callback(null, address.address, address.family),
-    };
-    const req = request(url, requestOptions, (response) => {
+    const request = requestOverride ?? (
+      (url.protocol === "https:" ? httpsRequest : httpRequest) as OpenNativeRequest
+    );
+    const plan = buildPinnedRequestPlan(url, address, headers, signal);
+    const req = request(plan.url, plan.options, (response) => {
       resolve({
         status: response.statusCode ?? 0,
         headers: response.headers,
@@ -335,9 +406,66 @@ async function openNativeTransport(
         close: () => response.destroy(),
       });
     });
+    // Node's built-in HTTP proxy derives its absolute request target (or HTTPS
+    // CONNECT endpoint) while constructing ClientRequest. Install the original
+    // Host only afterwards so proxy/direct routing stays pinned to the vetted
+    // IP, while the origin still receives the correct virtual-host header.
+    req.setHeader("Host", plan.hostHeader);
     req.once("error", reject);
     req.end();
   });
+}
+
+/**
+ * Build a request that is safe both with and without Node's environment proxy.
+ *
+ * The URL used by `http(s).request` contains the vetted IP. Consequently a
+ * direct connection cannot re-resolve the untrusted hostname, and Node's global
+ * proxy CONNECT/absolute-form target is also the vetted IP. The original
+ * hostname is retained separately for HTTP virtual hosting plus HTTPS SNI and
+ * certificate identity verification. `agent` is deliberately absent: when
+ * `configureEnvProxy()` has installed a proxy-aware global agent it is used;
+ * otherwise Node's ordinary global agent connects directly to the same IP.
+ */
+export function buildPinnedRequestPlan(
+  url: URL,
+  address: ResolvedAddress,
+  headers: Readonly<Record<string, string>>,
+  signal: AbortSignal
+): PinnedRequestPlan {
+  if (isIP(address.address) !== address.family) {
+    throw new OutboundUrlPolicyError("Invalid vetted outbound address");
+  }
+
+  const pinnedUrl = new URL(url.toString());
+  pinnedUrl.hostname = address.family === 6 ? `[${address.address}]` : address.address;
+  if (normalizeHostname(pinnedUrl.hostname) !== normalizeHostname(address.address)) {
+    throw new OutboundUrlPolicyError("Unable to pin outbound request address");
+  }
+
+  const safeHeaders: Record<string, string> = {};
+  for (const [name, value] of Object.entries(headers)) {
+    // Host is a security invariant derived from the validated origin URL. A
+    // caller must never be able to replace it through SafeFetchOptions.headers.
+    if (name.trim().toLowerCase() === "host") continue;
+    safeHeaders[name] = value;
+  }
+
+  const originalHostname = normalizeHostname(url.hostname);
+  const servername = url.protocol === "https:" && isIP(originalHostname) === 0
+    ? originalHostname
+    : undefined;
+  return {
+    url: pinnedUrl,
+    options: {
+      method: "GET",
+      headers: safeHeaders,
+      servername,
+      rejectUnauthorized: true,
+      signal,
+    },
+    hostHeader: url.host,
+  };
 }
 
 async function raceWithAbort<T>(promise: Promise<T>, signal: AbortSignal, message: string): Promise<T> {
@@ -431,6 +559,10 @@ function assertFetchBounds(options: SafeFetchOptions): void {
 
 function normalizeHostname(value: string): string {
   return stripIpv6Brackets(value.trim().toLowerCase().replace(/\.$/, ""));
+}
+
+function hasUnsafeUrlCharacters(value: string): boolean {
+  return URL_CONTROL_CHARACTERS.test(value) || URL_ENCODED_CONTROL_CHARACTERS.test(value);
 }
 
 function stripIpv6Brackets(value: string): string {

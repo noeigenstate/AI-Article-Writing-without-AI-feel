@@ -5,7 +5,8 @@ import {
   type GzhFormatResponseDTO,
   type GzhThemeDTO,
 } from "../../lib/api.js";
-import { paragraphsToMarkdown, renderBlocksToMarkdown } from "../../lib/gzhMarkdown.js";
+import { paragraphsToMarkdown, renderBlocksForGzh } from "../../lib/gzhMarkdown.js";
+import { hydrateGzhSourceMedia } from "../../lib/gzhMedia.js";
 import { useStore } from "../../lib/store.js";
 import { Sparkle } from "../common/icons.js";
 import ProgressBanner from "../common/ProgressBanner.js";
@@ -47,10 +48,14 @@ export default function GzhExportPanel() {
     });
   }, [lang]);
 
-  function buildMarkdown(): string {
+  function buildGzhInput() {
     return renderBlocks?.length
-      ? renderBlocksToMarkdown(renderBlocks, paragraphs)
-      : paragraphsToMarkdown(paragraphs, titleIndex);
+      ? renderBlocksForGzh(renderBlocks, paragraphs)
+      : { markdown: paragraphsToMarkdown(paragraphs, titleIndex), sourceMedia: [] };
+  }
+
+  function buildMarkdown(): string {
+    return buildGzhInput().markdown;
   }
 
   async function format() {
@@ -60,7 +65,21 @@ export default function GzhExportPanel() {
     setCopied(null);
     setProgress({ task: "gzhFormat", startedAt: Date.now() });
     try {
-      setResult(await formatGzhArticle(buildMarkdown(), themeId, "", lang));
+      const prepared = buildGzhInput();
+      const formatted = await formatGzhArticle(prepared.markdown, themeId, "", lang);
+      const hydrated = hydrateGzhSourceMedia(formatted.html, prepared.sourceMedia, lang);
+      const mediaWarning = hydrated.missingTokens.length > 0
+        ? (lang === "zh"
+            ? `有 ${hydrated.missingTokens.length} 个来源素材未能恢复，已保留为待补素材。`
+            : `${hydrated.missingTokens.length} source media item(s) could not be restored and remain placeholders.`)
+        : undefined;
+      setResult({
+        ...formatted,
+        html: hydrated.html,
+        validation: mediaWarning
+          ? { ...formatted.validation, warnings: [...formatted.validation.warnings, mediaWarning] }
+          : formatted.validation,
+      });
     } catch (e) {
       setError((e as Error).message);
     } finally {

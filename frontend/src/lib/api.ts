@@ -77,7 +77,6 @@ export interface ResearchItemDTO {
   summary: string;
   excerpt?: string;
   url: string;
-  imageUrl?: string;
   publishedAt: string;
   authors: string[];
 }
@@ -110,9 +109,27 @@ export interface ArticleLengthDTO {
 
 export type WritingSceneId = "general" | "wechat" | "business" | "academic" | "official" | "social" | "technical";
 
+export type ArticleSourceMediaMime = "image/png" | "image/jpeg" | "image/webp" | "image/gif";
+
 export type ArticleRenderBlockDTO =
   | { type: "paragraph"; kind: string; text: string; paragraphIndex?: number }
-  | { type: "figure"; title: string; caption: string; svg: string; sourceName?: string; sourceUrl?: string }
+  | {
+      type: "figure";
+      origin: "web";
+      title: string;
+      caption: string;
+      alt: string;
+      mediaKind: "image" | "gif";
+      mimeType: ArticleSourceMediaMime;
+      /** Backend-downloaded and binary-validated source bytes; never a remote URL or SVG. */
+      mediaDataUri: string;
+      width: number;
+      height: number;
+      sourceName: string;
+      sourceTitle: string;
+      sourceUrl: string;
+      sourceRef: number;
+    }
   | { type: "table"; title: string; columns: string[]; rows: string[][]; note?: string }
   | { type: "references"; title: string; items: string[] };
 

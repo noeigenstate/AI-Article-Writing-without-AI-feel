@@ -1,6 +1,7 @@
 import { XMLParser } from "fast-xml-parser";
 import { cached } from "./cache.js";
 import { fetchTextWithTimeout } from "./http.js";
+import { normalizePublicSourceUrl } from "./networkSafety.js";
 import { waitForProvider } from "./rateLimit.js";
 import type { ResearchItem } from "./types.js";
 
@@ -42,6 +43,18 @@ function cleanText(value: XmlValue): string | undefined {
   return text || undefined;
 }
 
+/** Read a URL field without normalizing away embedded control characters. */
+function cleanUrlText(value: XmlValue): string | undefined {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    const raw = String(value);
+    if (/\p{Cc}/u.test(raw)) return undefined;
+    return raw.trim() || undefined;
+  }
+  if (Array.isArray(value)) return undefined;
+  return cleanUrlText((value as Record<string, unknown>)["#text"] as XmlValue);
+}
+
 /** Return the first non-empty cleaned text among the candidates. */
 function firstText(...values: XmlValue[]): string | undefined {
   for (const value of values) {
@@ -57,9 +70,9 @@ function firstText(...values: XmlValue[]): string | undefined {
 function entryUrl(entry: Record<string, unknown>): string | undefined {
   const links = asArray(entry.link as Record<string, unknown> | string | undefined);
   const alternate = links.find((link) => isRecord(link) && link.rel === "alternate");
-  const href = isRecord(alternate) ? cleanText(alternate.href as XmlValue) : undefined;
-  const id = cleanText(entry.id as XmlValue);
-  return href || id;
+  const href = isRecord(alternate) ? cleanUrlText(alternate.href as XmlValue) : undefined;
+  const id = cleanUrlText(entry.id as XmlValue);
+  return normalizePublicSourceUrl(href) || normalizePublicSourceUrl(id);
 }
 
 /** Extract author names from an entry, if any. */

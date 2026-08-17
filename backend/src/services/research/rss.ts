@@ -1,6 +1,7 @@
 import { XMLParser } from "fast-xml-parser";
 import { cached } from "./cache.js";
 import { fetchTextWithTimeout } from "./http.js";
+import { normalizePublicSourceUrl } from "./networkSafety.js";
 import type { NewsSource, ResearchItem, ResearchRegion } from "./types.js";
 
 const parser = new XMLParser({
@@ -145,6 +146,18 @@ function cleanText(value: XmlValue): string | undefined {
   return text || undefined;
 }
 
+/** Read a URL field without erasing embedded control characters before validation. */
+function cleanUrlText(value: XmlValue): string | undefined {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    const raw = String(value);
+    if (/\p{Cc}/u.test(raw)) return undefined;
+    return raw.trim() || undefined;
+  }
+  if (Array.isArray(value)) return undefined;
+  return cleanUrlText((value as Record<string, unknown>)["#text"] as XmlValue);
+}
+
 /** Resolve a feed `link` node to an HTTP(S) URL (prefer `alternate`, then href/text). */
 function linkText(value: XmlValue, baseUrl: string): string | undefined {
   if (Array.isArray(value)) {
@@ -153,11 +166,11 @@ function linkText(value: XmlValue, baseUrl: string): string | undefined {
   }
   if (isRecord(value)) {
     return (
-      safeHttpUrl(cleanText(value.href as XmlValue), baseUrl) ||
-      safeHttpUrl(cleanText(value["#text"] as XmlValue), baseUrl)
+      safeHttpUrl(cleanUrlText(value.href as XmlValue), baseUrl) ||
+      safeHttpUrl(cleanUrlText(value["#text"] as XmlValue), baseUrl)
     );
   }
-  return safeHttpUrl(cleanText(value), baseUrl);
+  return safeHttpUrl(cleanUrlText(value), baseUrl);
 }
 
 /** Resolve the publisher URL carried by an RSS/Atom `<source>` node. */
@@ -168,21 +181,12 @@ function publisherUrl(value: XmlValue, baseUrl: string): string | undefined {
   if (!isRecord(value)) {
     return undefined;
   }
-  return safeHttpUrl(cleanText((value.url ?? value.href) as XmlValue), baseUrl);
+  return safeHttpUrl(cleanUrlText((value.url ?? value.href) as XmlValue), baseUrl);
 }
 
-/** Resolve only credential-free absolute HTTP(S) URLs, including safe relative feed links. */
+/** Resolve only public source URLs, including safe relative feed links. */
 function safeHttpUrl(value: string | undefined, baseUrl?: string): string | undefined {
-  if (!value) return undefined;
-  try {
-    const url = baseUrl ? new URL(value, baseUrl) : new URL(value);
-    if ((url.protocol !== "http:" && url.protocol !== "https:") || url.username || url.password) {
-      return undefined;
-    }
-    return url.toString();
-  } catch {
-    return undefined;
-  }
+  return normalizePublicSourceUrl(value, baseUrl);
 }
 
 function normalizedHostname(value: string): string {
@@ -282,7 +286,7 @@ function imageUrl(value: XmlValue, baseUrl: string): string | undefined {
   }
 
   const record = value as Record<string, unknown>;
-  const directUrl = cleanText((record.url ?? record.href ?? record.src) as XmlValue);
+  const directUrl = cleanUrlText((record.url ?? record.href ?? record.src) as XmlValue);
   const type = cleanText(record.type as XmlValue)?.toLowerCase() ?? "";
   const normalizedDirectUrl = safeHttpUrl(directUrl, baseUrl);
   if (normalizedDirectUrl && (isImageUrl(normalizedDirectUrl) || type.startsWith("image/"))) {
@@ -343,7 +347,7 @@ function fromRssItem(item: Record<string, unknown>, source: NewsSource): Researc
   const title = cleanText(item.title as XmlValue);
   const url =
     linkText(item.link as XmlValue, source.url) ||
-    safeHttpUrl(cleanText(item.guid as XmlValue), source.url);
+    safeHttpUrl(cleanUrlText(item.guid as XmlValue), source.url);
 
   if (!title || !url) {
     return undefined;
@@ -374,7 +378,7 @@ function fromAtomEntry(entry: Record<string, unknown>, source: NewsSource): Rese
   const title = cleanText(entry.title as XmlValue);
   const url =
     linkText(entry.link as XmlValue, source.url) ||
-    safeHttpUrl(cleanText(entry.id as XmlValue), source.url);
+    safeHttpUrl(cleanUrlText(entry.id as XmlValue), source.url);
 
   if (!title || !url) {
     return undefined;

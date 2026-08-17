@@ -7,7 +7,7 @@
 Open-source AI writing workbench for **Word rewriting**, **human-likeness scoring**, **source-backed article generation**, and **WeChat Official Account formatting**. It works in English and Chinese.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-22a06b.svg)](LICENSE)
-![Node](https://img.shields.io/badge/Node-%E2%89%A518-339933?logo=node.js&logoColor=white)
+![Node](https://img.shields.io/badge/Node-%E2%89%A520.9-339933?logo=node.js&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178c6?logo=typescript&logoColor=white)
 ![React](https://img.shields.io/badge/React-18-61dafb?logo=react&logoColor=white)
 
@@ -21,10 +21,10 @@ Open-source AI writing workbench for **Word rewriting**, **human-likeness scorin
 
 | Rewrite Word | Generate Articles | WeChat Formatting |
 | --- | --- | --- |
-| <img src="assets/screenshots/01-rewrite.png" alt="Rewrite Word page" /> | <img src="assets/screenshots/02-generate.png" alt="Generate article page" /> | <img src="assets/screenshots/03-gzh.png" alt="WeChat formatting page" /> |
+| <img src="assets/screenshots/01-rewrite.png" alt="Rewrite Word workflow in the editorial proof-desk interface" /> | <img src="assets/screenshots/02-generate.png" alt="Source-backed article generation workflow" /> | <img src="assets/screenshots/03-gzh.png" alt="WeChat-formatted article preview with a restored source image and attribution" /> |
 
 <div align="center">
-  <sub>A light SaaS-style workspace: Word rewriting, source-backed article generation, and WeChat-ready formatting behind one sidebar.</sub>
+  <sub>An editorial proof desk for Word rewriting, source-backed article generation, and self-contained WeChat-ready layouts.</sub>
 </div>
 
 ## What It Does
@@ -35,6 +35,7 @@ Open-source AI writing workbench for **Word rewriting**, **human-likeness scorin
 - **Learn your style** from uploaded `.docx` or `.txt` samples.
 - **Show progress while the model works** for article writing, whole-document rewriting, title options, and topic generation.
 - **Generate an article from a title or domain** with default searches across relevant web articles, public comments, arXiv papers, and RSS news, using attributed paraphrases or short excerpts.
+- **Carry verified source media through the full workflow**: the backend downloads and validates attributed web images or GIFs, then reuses the same bytes in the editor, Word, and WeChat export.
 - **Auto-format generated articles for the WeChat Official Account editor**: pick a visual theme in the article editor, click Auto-format, then copy the result straight into 公众号 with one click.
 - **Run privately** with any OpenAI-compatible endpoint, including local model servers.
 
@@ -44,7 +45,7 @@ You need:
 
 | Tool | Why |
 | --- | --- |
-| Node.js 18+ | Runs the frontend and backend |
+| Node.js 20.9+ (22/24 recommended) | Runs the frontend, backend, and verified source-image decoder |
 | npm | Installs project packages |
 | A model API key | DeepSeek/OpenAI-compatible by default |
 | Or a local model server | Ollama, LM Studio, vLLM, etc. |
@@ -103,7 +104,7 @@ The backend binds to `127.0.0.1` by default and accepts browser requests only fr
 
 ## Interface
 
-The current UI is a light SaaS-style workspace: a white sidebar for tool navigation and language switching, a pastel aurora backdrop, a gradient hero headline, white rounded cards for each step, and violet gradient primary actions. The goal is a focused writing workspace that feels like a modern web tool rather than a decorative skin.
+The current UI is an editorial proof desk: a deep ink-green rail frames a cool paper canvas, coral marks authorship actions, cyan identifies evidence and focus, and the finished draft sits on a white document galley. Rewrite and generation remain separate persistent workspaces, so switching modes does not discard an in-progress document or WeChat layout.
 
 Long-running actions never leave the user waiting without feedback. The frontend shows a progress panel with percentage, current phase, and recent log-style steps for article generation, topic/title generation, and whole-document rewriting.
 
@@ -158,6 +159,14 @@ The writing prompt tells the model to paraphrase web material by default. When e
 
 Inline `[n]` markers are kept only when they resolve to retrieved sources. The model is asked to cite factual claims and external material where possible, but missing markers do not block generation; out-of-range markers are stripped, uncited prose remains uncited, and the retrieved reference list is still attached. Source images are downloaded through the backend's outbound-safety policy and embedded in Word and browser preview data rather than loaded remotely by the browser.
 
+## Narrative and Multimedia
+
+Before drafting, the model internally merges duplicated material and organizes it as reader question → evidence → mechanism → dispute/limits → practical judgment, rather than summarizing one source after another. Paragraph roles and section anchors make medium and long pieces scannable. If the opening, evidence, explanation, or closing callback is seriously broken, one optional flow-repair pass may run; it is non-blocking and never turns a usable draft into a hard failure.
+
+Literary craft is budgeted by writing scene. General and newsletter prose may use one source-supported contrast-before-reveal, sparing personification, and an opening scene that echoes at the close. Business, academic, official, and technical writing lowers or disables those devices. Rhetoric may not invent a person's thoughts or dialogue, a witnessed news scene, an institution's intention, or unsupported mass emotion; factual claims and imagery remain distinct.
+
+The system uses only relevant, attributable network images or GIFs whose original bytes pass backend safety validation. It prefers images from the researched publisher pages; when those are insufficient, it searches Openverse for openly licensed photographs and appends the creator, license name and URL, and original work page to the caption and references. The length tier sets a maximum of two source images for short pieces, four for medium, and six for long; it is not a quota. If a source image is unavailable, unrelated, unsafe, over budget, or cannot be attributed, the article has fewer images or none. The application does not draw replacement cards or generate substitute images. GIFs are mounted and decoded only after an explicit play action in the document editor; reduced-motion mode leaves them unmounted there. Word and WeChat export receive the same validated source media. For WeChat formatting, the bytes stay outside the model prompt and replace stable insertion markers only after sanitized HTML returns, producing a self-contained preview without remote hotlinks. Image generation is intentionally reserved for a future dedicated model. Openverse aggregates license metadata, so verify the terms on the original work page before publishing; attribution alone does not grant republication rights.
+
 ## Article Length Targets
 
 Length tiers use explicit body-only ranges: Chinese short 450–650 characters, medium 1,000–1,300, and long 3,000–3,800; English short 350–500 words, medium 850–1,100, and long 2,200–2,800. If the first draft misses its band, the backend runs up to two corrective passes. A generation request succeeds only when the final body is inside its selected range; a persistent miss returns a retryable error instead of an off-target article. The final count and target range travel with successful responses and update live while editing. Titles, references, inline citation markers, figure captions, and tables do not count toward the body target.
@@ -168,6 +177,7 @@ After generating an article, the editor shows a formatting bar: pick a theme fro
 
 - **Six themes** built on [gzh-design-skill](https://github.com/isjiamu/gzh-design-skill) component libraries: 翡翠清新, 红白杂志, 石墨极简, 禅意留白, 创意票据, 橄榄内刊. Each theme defines the cover, chapter titles, quote cards, and signature that the model assembles per chapter.
 - **Compliance validation** is deterministic (ported from the skill's Python validator): forbidden tags/styles are errors, unwrapped text and half-width punctuation are warnings, and failing chunks get one automatic repair pass.
+- **Self-contained source media**: verified image bytes never enter the formatting-model prompt. Stable placement markers are restored only after the returned HTML is sanitized, so the preview contains the real image and attribution without a remote hotlink.
 - **One-click paste**: the live preview renders the exact rich text; “复制到公众号” puts it on the clipboard for direct pasting, and the HTML download is a standalone preview page with its own copy button.
 
 ## Private Local Mode
@@ -190,6 +200,9 @@ npm run build
 npm run test:article
 npm run test:research
 npm run test:research-security
+npm run test:licensed-media
+npm run test:docx
+npm run test:gzh-security
 npm run test:score
 ```
 
@@ -197,6 +210,8 @@ npm run test:score
 cd frontend
 npm run build
 npm run test:progress
+npm run test:gzh-security
+npm run test:api-network
 ```
 
 ## Project Map
@@ -211,7 +226,7 @@ backend/
 frontend/
   src/components/  upload, generate, gzh, editor, common UI
   src/lib/         API client, store, i18n
-  src/styles.css   light workspace theme (sidebar, hero, cards)
+  src/styles.css   editorial proof-desk theme and responsive layouts
 
 assets/screenshots/  README screenshots
 docs/                design notes

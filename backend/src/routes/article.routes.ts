@@ -18,6 +18,8 @@ import {
 } from "../services/article.js";
 import { collectResearch, formatResearchContext } from "../services/research/aggregate.js";
 import { enrichResearchImages } from "../services/research/images.js";
+import { searchLicensedMediaForArticle } from "../services/research/licensedMedia.js";
+import type { ResearchBundle } from "../services/research/types.js";
 import { titleIndexOf } from "../services/rewrite.js";
 import { saveDoc } from "../core/store.js";
 import { getBuiltinStyle } from "../data/styles.js";
@@ -58,7 +60,7 @@ router.post("/api/article/topics", async (req, res) => {
       researchCoverage: bundle.coverage,
       lang,
     });
-    res.json({ domain, topics, research: bundle });
+    res.json({ domain, topics, research: withoutRemoteImageUrls(bundle) });
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });
   }
@@ -76,7 +78,10 @@ router.post("/api/research/preview", async (req, res) => {
     const lang = normalizeLang(rawLang);
     const domain = resolveArticleDomain(domainId, customDomain, lang);
     const bundle = await collectResearch(domain.name, query?.trim() || domain.name);
-    res.json({ ...bundle, context: formatResearchContext(bundle.items, 10) });
+    res.json({
+      ...withoutRemoteImageUrls(bundle),
+      context: formatResearchContext(bundle.items, 10),
+    });
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });
   }
@@ -203,9 +208,34 @@ async function generateArticlePayload(input: {
     targetLength,
     researchContext,
     researchCoverage: bundle.coverage,
+    sceneId: input.sceneId,
+    styleId: input.styleId,
     lang,
   });
-  const article = await enrichArticleWithResearch(draft, bundleWithImages.items, new Date(bundle.generatedAt), lang);
+  const desiredFigureCount = targetLength === "short" ? 2 : targetLength === "long" ? 6 : 4;
+  let article = await enrichArticleWithResearch(
+    draft,
+    bundleWithImages.items,
+    new Date(bundle.generatedAt),
+    lang
+  );
+  const actualFigureCount = Number(Boolean(article.figure)) + (article.bodyFigures?.length ?? 0);
+  if (actualFigureCount < desiredFigureCount) {
+    const supplementalMedia = await searchLicensedMediaForArticle(
+      draft,
+      bundleWithImages.items.map((item) => item.query),
+      desiredFigureCount - actualFigureCount
+    );
+    if (supplementalMedia.length > 0) {
+      article = await enrichArticleWithResearch(
+        draft,
+        bundleWithImages.items,
+        new Date(bundle.generatedAt),
+        lang,
+        { supplementalMedia }
+      );
+    }
+  }
   const length = measureArticleLength(article.paragraphs, lang, targetLength);
 
   const docx = await createDocxFromBlocks(articleToDocBlocks(article, lang));
@@ -221,7 +251,7 @@ async function generateArticlePayload(input: {
     docId: rec.id,
     styleSummary,
     length,
-    research: bundleWithImages,
+    research: withoutRemoteImageUrls(bundleWithImages),
     renderBlocks,
     titleIndex: titleIndexOf(parsed.paragraphs),
     paragraphs: parsed.paragraphs.map((p) => ({
@@ -231,6 +261,18 @@ async function generateArticlePayload(input: {
       rewritten: p.text,
       sentences: splitSentences(p.text),
     })),
+  };
+}
+
+/** Keep source-page attribution while withholding remote image URLs from API clients. */
+function withoutRemoteImageUrls(bundle: ResearchBundle): ResearchBundle {
+  return {
+    ...bundle,
+    items: bundle.items.map((item) => {
+      const copy = { ...item };
+      delete copy.imageUrl;
+      return copy;
+    }),
   };
 }
 

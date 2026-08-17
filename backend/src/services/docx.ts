@@ -1,5 +1,5 @@
 import JSZip from "jszip";
-import { deflateSync } from "node:zlib";
+import { validateDecodableRasterImage } from "./research/images.js";
 
 /**
  * docx 解析与导出。
@@ -15,7 +15,15 @@ export type ParaKind = "heading1" | "heading2" | "heading3" | "list" | "normal";
 export type DocxBlock =
   | { type: "paragraph"; kind: ParaKind; text: string }
   | { type: "table"; title?: string; columns: string[]; rows: string[][]; note?: string }
-  | { type: "figure"; title: string; caption: string; svg: string };
+  | {
+      type: "figure";
+      title: string;
+      caption: string;
+      mediaDataUri: string;
+      mimeType: "image/png" | "image/jpeg" | "image/gif" | "image/webp";
+      width: number;
+      height: number;
+    };
 
 /** One parsed paragraph, aligned by index with the source document. */
 export interface ParsedParagraph {
@@ -32,63 +40,82 @@ export interface ParsedDoc {
 
 const PSTYLE_RE = /<w:pStyle\b[^>]*w:val="([^"]*)"/;
 const WT_RE = /<w:t\b[^>]*>([\s\S]*?)<\/w:t>/g;
-/**
- * 不支持 svgBlip 的旧版 Word 会显示这张 PNG 兜底图。
- * 用与 SVG 图卡等尺寸的浅灰实色块（而不是 1×1 透明像素——那会被拉伸成一片空白）。
- */
-let figureFallbackPng: Buffer | undefined;
-function getFigureFallbackPng(): Buffer {
-  figureFallbackPng ??= solidPng(760, 360, [0xe2, 0xe8, 0xf0]);
-  return figureFallbackPng;
+type FigureMime = Extract<DocxBlock, { type: "figure" }>["mimeType"];
+
+interface PreparedFigure {
+  bytes: Buffer;
+  extension: "png" | "jpg" | "gif" | "webp";
+  cx: number;
+  cy: number;
 }
 
-/** Encode a solid-color truecolor PNG (8-bit RGB) without external deps. */
-function solidPng(width: number, height: number, [r, g, b]: [number, number, number]): Buffer {
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(width, 0);
-  ihdr.writeUInt32BE(height, 4);
-  ihdr[8] = 8; // bit depth
-  ihdr[9] = 2; // color type: truecolor
+const INVALID_FIGURE_MEDIA_ERROR = "Invalid DOCX figure media";
+const FIGURE_EXTENSIONS: Record<FigureMime, PreparedFigure["extension"]> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/gif": "gif",
+  "image/webp": "webp",
+};
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
-  const row = Buffer.alloc(1 + width * 3); // 每行前置 1 字节 filter=0
-  for (let x = 0; x < width; x++) {
-    row[1 + x * 3] = r;
-    row[2 + x * 3] = g;
-    row[3 + x * 3] = b;
+function invalidFigureMedia(): never {
+  throw new Error(INVALID_FIGURE_MEDIA_ERROR);
+}
+
+/** Decode one canonical base64 data URI and reject MIME/header spoofing. */
+async function prepareFigure(figure: Extract<DocxBlock, { type: "figure" }>): Promise<PreparedFigure> {
+  const match = /^data:(image\/(?:png|jpeg|gif|webp));base64,([A-Za-z0-9+/]+={0,2})$/u.exec(
+    figure.mediaDataUri
+  );
+  if (!match || match[1] !== figure.mimeType) invalidFigureMedia();
+
+  const payload = match[2];
+  if (payload.length % 4 !== 0) invalidFigureMedia();
+  const bytes = Buffer.from(payload, "base64");
+  if (bytes.length === 0 || bytes.toString("base64") !== payload) invalidFigureMedia();
+  if (!hasExpectedImageSignature(bytes, figure.mimeType)) invalidFigureMedia();
+  if (!Number.isSafeInteger(figure.width) || figure.width <= 0) invalidFigureMedia();
+  if (!Number.isSafeInteger(figure.height) || figure.height <= 0) invalidFigureMedia();
+  const decoded = await validateDecodableRasterImage(bytes, figure.mimeType);
+  if (!decoded || decoded.width !== figure.width || decoded.height !== figure.height) invalidFigureMedia();
+
+  const { cx, cy } = figureExtent(figure.width, figure.height);
+  return {
+    bytes,
+    extension: FIGURE_EXTENSIONS[figure.mimeType],
+    cx,
+    cy,
+  };
+}
+
+function hasExpectedImageSignature(bytes: Buffer, mimeType: FigureMime): boolean {
+  if (mimeType === "image/png") {
+    return bytes.length >= PNG_SIGNATURE.length && bytes.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE);
   }
-  const idat = deflateSync(Buffer.concat(Array.from({ length: height }, () => row)));
-
-  return Buffer.concat([
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    pngChunk("IHDR", ihdr),
-    pngChunk("IDAT", idat),
-    pngChunk("IEND", Buffer.alloc(0)),
-  ]);
-}
-
-function pngChunk(type: string, data: Buffer): Buffer {
-  const head = Buffer.alloc(4);
-  head.writeUInt32BE(data.length, 0);
-  const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
-  const crc = Buffer.alloc(4);
-  crc.writeUInt32BE(crc32(body), 0);
-  return Buffer.concat([head, body, crc]);
-}
-
-const CRC_TABLE = (() => {
-  const table = new Uint32Array(256);
-  for (let n = 0; n < 256; n++) {
-    let c = n;
-    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    table[n] = c >>> 0;
+  if (mimeType === "image/jpeg") {
+    return bytes.length >= 4 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
   }
-  return table;
-})();
+  if (mimeType === "image/gif") {
+    const signature = bytes.subarray(0, 6).toString("ascii");
+    return signature === "GIF87a" || signature === "GIF89a";
+  }
+  return bytes.length >= 12
+    && bytes.subarray(0, 4).toString("ascii") === "RIFF"
+    && bytes.subarray(8, 12).toString("ascii") === "WEBP";
+}
 
-function crc32(buf: Buffer): number {
-  let c = 0xffffffff;
-  for (const byte of buf) c = CRC_TABLE[(c ^ byte) & 0xff] ^ (c >>> 8);
-  return (c ^ 0xffffffff) >>> 0;
+/** Fit the source aspect ratio inside a readable Word page area. */
+function figureExtent(width: number, height: number): { cx: number; cy: number } {
+  const maxCx = 5_760_000;
+  const maxCy = 6_480_000;
+  const ratio = width / height;
+  let cx = maxCx;
+  let cy = Math.round(cx / ratio);
+  if (cy > maxCy) {
+    cy = maxCy;
+    cx = Math.round(cy * ratio);
+  }
+  return { cx: Math.max(1, cx), cy: Math.max(1, cy) };
 }
 
 interface XmlSpan {
@@ -265,7 +292,7 @@ export async function createDocxFromParagraphs(
 }
 
 /**
- * Build a docx from structured blocks: paragraphs, Word tables, and embedded SVG figures.
+ * Build a docx from structured blocks: paragraphs, Word tables, and source images.
  *
  * @param blocks The ordered content blocks.
  * @returns The docx bytes.
@@ -276,20 +303,23 @@ export async function createDocxFromBlocks(blocks: DocxBlock[]): Promise<Buffer>
   zip.folder("_rels")?.file(".rels", packageRelsXml());
   const word = zip.folder("word");
   const figureBlocks = blocks.filter((block): block is Extract<DocxBlock, { type: "figure" }> => block.type === "figure");
-  word?.file("document.xml", documentXml(blocks));
+  // Decode sequentially so a document with several large figures cannot make
+  // every image decoder allocate its full pixel buffer at the same time.
+  const preparedFigures: PreparedFigure[] = [];
+  for (const figure of figureBlocks) preparedFigures.push(await prepareFigure(figure));
+  word?.file("document.xml", documentXml(blocks, preparedFigures));
   word?.file("styles.xml", stylesXml());
-  word?.folder("_rels")?.file("document.xml.rels", documentRelsXml(figureBlocks.length));
+  word?.folder("_rels")?.file("document.xml.rels", documentRelsXml(preparedFigures));
   const media = word?.folder("media");
-  figureBlocks.forEach((figure, index) => {
+  preparedFigures.forEach((figure, index) => {
     const id = index + 1;
-    media?.file(`figure${id}.svg`, figure.svg);
-    media?.file(`figure${id}.png`, getFigureFallbackPng());
+    media?.file(`figure${id}.${figure.extension}`, figure.bytes);
   });
   return zip.generateAsync({ type: "nodebuffer" });
 }
 
 /** Build the `word/document.xml` body from content blocks. */
-function documentXml(blocks: DocxBlock[]): string {
+function documentXml(blocks: DocxBlock[], figures: PreparedFigure[]): string {
   let figureIndex = 0;
   const body = blocks
     .map((block) => {
@@ -300,8 +330,9 @@ function documentXml(blocks: DocxBlock[]): string {
         return tableBlockXml(block);
       }
 
+      const figure = figures[figureIndex];
       figureIndex += 1;
-      return figureBlockXml(block, figureIndex);
+      return figureBlockXml(block, figureIndex, figure);
     })
     .join("");
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -310,7 +341,6 @@ function documentXml(blocks: DocxBlock[]): string {
   xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
   xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
   xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
-  xmlns:asvg="http://schemas.microsoft.com/office/drawing/2016/SVG/main"
   xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
   <w:body>
     ${body}
@@ -365,14 +395,15 @@ function tableRowXml(cells: string[], isHeader: boolean): string {
     .join("")}</w:tr>`;
 }
 
-/** Render a figure block (title + embedded SVG drawing + caption) as XML. */
-function figureBlockXml(figure: Extract<DocxBlock, { type: "figure" }>, index: number): string {
-  const pngRid = `rIdFigurePng${index}`;
-  const svgRid = `rIdFigureSvg${index}`;
-  const cx = 5_760_000;
-  const cy = 2_520_000;
-  return `${paragraphXml("heading2", figure.title)}
-<w:p><w:r><w:drawing>
+/** Render a figure block (original source image + caption) as XML. */
+function figureBlockXml(
+  figure: Extract<DocxBlock, { type: "figure" }>,
+  index: number,
+  prepared: PreparedFigure
+): string {
+  const rid = `rIdFigure${index}`;
+  const { cx, cy, extension } = prepared;
+  return `<w:p><w:r><w:drawing>
   <wp:inline distT="0" distB="0" distL="0" distR="0">
     <wp:extent cx="${cx}" cy="${cy}"/>
     <wp:docPr id="${index}" name="Figure ${index}"/>
@@ -380,17 +411,11 @@ function figureBlockXml(figure: Extract<DocxBlock, { type: "figure" }>, index: n
       <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
         <pic:pic>
           <pic:nvPicPr>
-            <pic:cNvPr id="${index}" name="figure${index}.svg"/>
+            <pic:cNvPr id="${index}" name="figure${index}.${extension}"/>
             <pic:cNvPicPr/>
           </pic:nvPicPr>
           <pic:blipFill>
-            <a:blip r:embed="${pngRid}">
-              <a:extLst>
-                <a:ext uri="{96DAC541-7B7A-43D3-8B79-37D633B846F1}">
-                  <asvg:svgBlip r:embed="${svgRid}"/>
-                </a:ext>
-              </a:extLst>
-            </a:blip>
+            <a:blip r:embed="${rid}"/>
             <a:stretch><a:fillRect/></a:stretch>
           </pic:blipFill>
           <pic:spPr>
@@ -405,14 +430,16 @@ function figureBlockXml(figure: Extract<DocxBlock, { type: "figure" }>, index: n
 ${paragraphXml("normal", figure.caption)}`;
 }
 
-/** The `[Content_Types].xml` part declaring docx/svg content types. */
+/** The `[Content_Types].xml` part declaring supported source image types. */
 function contentTypesXml(): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
   <Default Extension="xml" ContentType="application/xml"/>
   <Default Extension="png" ContentType="image/png"/>
-  <Default Extension="svg" ContentType="image/svg+xml"/>
+  <Default Extension="jpg" ContentType="image/jpeg"/>
+  <Default Extension="gif" ContentType="image/gif"/>
+  <Default Extension="webp" ContentType="image/webp"/>
   <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
   <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
 </Types>`;
@@ -426,14 +453,11 @@ function packageRelsXml(): string {
 </Relationships>`;
 }
 
-/** The `word/_rels/document.xml.rels` linking styles and each figure image. */
-function documentRelsXml(figureCount = 0): string {
-  const figureRels = Array.from({ length: figureCount }, (_, index) => {
+/** The `word/_rels/document.xml.rels` linking styles and each original figure image. */
+function documentRelsXml(figures: PreparedFigure[] = []): string {
+  const figureRels = figures.map((figure, index) => {
     const id = index + 1;
-    return [
-      `<Relationship Id="rIdFigurePng${id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/figure${id}.png"/>`,
-      `<Relationship Id="rIdFigureSvg${id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/figure${id}.svg"/>`,
-    ].join("");
+    return `<Relationship Id="rIdFigure${id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/figure${id}.${figure.extension}"/>`;
   }).join("");
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">

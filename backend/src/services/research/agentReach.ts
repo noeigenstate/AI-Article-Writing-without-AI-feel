@@ -2,6 +2,7 @@ import { execFile, type ExecFileOptionsWithStringEncoding } from "node:child_pro
 import { promisify } from "node:util";
 import { cached } from "./cache.js";
 import { inferPublisherName, inferPublisherRegion } from "./rss.js";
+import { normalizePublicSourceUrl } from "./networkSafety.js";
 import type { ResearchItem, ResearchSourceKind } from "./types.js";
 
 const execFileAsync = promisify(execFile);
@@ -119,8 +120,8 @@ function normalizeResult(
 
   const result = raw as AgentReachRawResult;
   const title = cleanText(asString(result.title), 180);
-  const url = cleanText(asString(result.url), 400);
-  if (!title || !url || !/^https?:\/\//i.test(url)) {
+  const url = normalizePublicSourceUrl(asString(result.url));
+  if (!title || !url) {
     return undefined;
   }
 
