@@ -1591,6 +1591,64 @@ assert.ok(
   JSON.stringify(discoveredSourceImages)
 );
 
+const ithomePrimaryImage =
+  "https://img.ithome.com/newsuploadfiles/2026/8/f5228449-ff16-418f-8162-3b36752e1394.png?x-bce-process=image/format,f_auto";
+const ithomeSecondaryImage =
+  "https://img.ithome.com/newsuploadfiles/2026/8/4c4c3043-b581-44cb-99f0-5326dc387afa.png";
+const ithomeSourceImages = extractSourceImageCandidatesFromHtml(
+  `<html>
+    <body>
+      <header><img src="/images/site-masthead.png" width="1200" height="300"></header>
+      <div id="paragraph">
+        <div class="image-wrapper">
+          <img
+            src="//img.ithome.com/images/v2/t.png"
+            data-original="${ithomePrimaryImage.replace(/&/g, "&amp;")}"
+            width="1298"
+            height="432"
+            alt="BlackBerry QNX product history"
+          >
+        </div>
+        <p>
+          <img
+            src="//img.ithome.com/images/v2/t.png"
+            data-original="${ithomeSecondaryImage}"
+            width="1382"
+            height="542"
+            alt="BlackBerry timeline"
+          >
+        </p>
+      </div>
+      <div class="recommend-list">
+        <img src="/images/recommended-story.jpg" width="1280" height="720">
+      </div>
+    </body>
+  </html>`,
+  "https://www.ithome.com/0/990/590.htm"
+);
+assert.equal(
+  ithomeSourceImages[0],
+  ithomePrimaryImage,
+  "a lazy-loaded image inside IT Home's #paragraph body must be the first content candidate"
+);
+assert.ok(
+  ithomeSourceImages.includes(ithomeSecondaryImage),
+  "nested divs must not end the surrounding article-body context"
+);
+assert.ok(
+  ithomeSourceImages.every((url) => !url.includes("site-masthead") && !url.includes("recommended-story")),
+  "images outside a strongly identified article body must remain excluded"
+);
+
+assert.deepEqual(
+  extractSourceImageCandidatesFromHtml(
+    `<div class="content"><img src="/images/generic-shell.jpg" width="1280" height="720"></div>`,
+    "https://example.com/story"
+  ),
+  [],
+  "a generic content wrapper alone must not broaden discovery to page chrome"
+);
+
 const sourceImageValidationAttempts: string[] = [];
 const selectedFallbackSourceImage = await selectFirstSafeSourceImageCandidate(
   ["https://images.example/broken-public.jpg", "https://cdn.example/story.jpg"],

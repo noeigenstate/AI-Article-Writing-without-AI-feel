@@ -23,6 +23,16 @@ const SOURCE_IMAGE_MIN_HEIGHT_HINT = 90;
 const SOURCE_IMAGE_MIN_AREA_HINT = 40_000;
 const SOURCE_IMAGE_JSON_LD_MAX_NODES = 2_048;
 const SOURCE_IMAGE_JSON_LD_MAX_DEPTH = 24;
+const ARTICLE_CONTENT_CONTAINER_EXACT_NAMES: ReadonlySet<string> = new Set([
+  "paragraph",
+  "articlebody",
+  "postbody",
+  "entrybody",
+  "storybody",
+  "newsbody",
+]);
+const ARTICLE_CONTENT_CONTAINER_NAME_PATTERN =
+  /^(?:(?:article|post|entry|story|news)-(?:body|content|detail|text|paragraphs?)|(?:body|content|detail|text)-(?:article|post|entry|story|news))$/;
 const IMAGE_MAX_BYTES = 3 * 1024 * 1024;
 const STATIC_IMAGE_DECODE_CONCURRENCY = 2;
 const STATIC_MAX_DIMENSION = 8_192;
@@ -138,7 +148,7 @@ async function fetchSourceImage(
   preferredCandidate?: string
 ): Promise<string | undefined> {
   if (!isSourcePageEligibleForImageDiscovery(url)) return undefined;
-  const cacheKey = `source-image:v3:${url}\n${preferredCandidate ?? ""}`;
+  const cacheKey = `source-image:v4:${url}\n${preferredCandidate ?? ""}`;
   return cached(cacheKey, SOURCE_IMAGE_SELECTION_CACHE_TTL_MS, async () => {
     let discoveredCandidates: string[] = [];
     try {
@@ -1286,9 +1296,10 @@ type HtmlAttributes = Record<string, string>;
  * Discover ordered, attributable image candidates from a source page.
  *
  * Social metadata remains the strongest signal, followed by JSON-LD article
- * media and images inside the page's article/figure content. Every candidate
- * is only a URL here: the selected asset still goes through the complete
- * binary/MIME/container/decode validation before it can enter an article.
+ * media and images inside semantic or strongly identified article content.
+ * Every candidate is only a URL here: the selected asset still goes through
+ * the complete binary/MIME/container/decode validation before it can enter an
+ * article.
  */
 export function extractSourceImageCandidatesFromHtml(html: string, pageUrl: string): string[] {
   if (!html || !pageUrl) return [];
@@ -1643,14 +1654,30 @@ function collectArticleImageCandidates(html: string): SourceImageCandidateHint[]
     /<(?:script|style|noscript|template)\b[^>]*>[\s\S]*?<\/(?:script|style|noscript|template)\s*>/gi,
     ""
   );
-  const tokenPattern = /<\s*(\/?)\s*(article|figure)\b([^>]{0,8192})>|<\s*img\b([^>]{0,8192})>/gi;
+  const tokenPattern = /<\s*(\/?)\s*(article|figure|main|div)\b([^>]{0,8192})>|<\s*img\b([^>]{0,8192})>/gi;
   const articleHints: string[] = [];
   const figureHints: string[] = [];
+  const divHints: Array<string | undefined> = [];
   let match: RegExpExecArray | null;
 
   while ((match = tokenPattern.exec(searchableHtml)) !== null) {
     const containerName = match[2]?.toLowerCase();
     if (containerName) {
+      if (containerName === "div") {
+        if (match[1]) {
+          divHints.pop();
+        } else {
+          const attributes = parseHtmlAttributes(match[3] || "");
+          divHints.push(
+            isLikelyArticleContentContainer(attributes)
+              ? imageContextFromAttributes(attributes)
+              : undefined
+          );
+          if (/\/\s*>$/.test(match[0])) divHints.pop();
+        }
+        continue;
+      }
+
       const stack = containerName === "figure" ? figureHints : articleHints;
       if (match[1]) {
         stack.pop();
@@ -1661,11 +1688,15 @@ function collectArticleImageCandidates(html: string): SourceImageCandidateHint[]
       }
       continue;
     }
-    if (figureHints.length === 0 && articleHints.length === 0) continue;
+    const activeDivHints = divHints.filter((hint): hint is string => hint !== undefined);
+    if (figureHints.length === 0 && articleHints.length === 0 && activeDivHints.length === 0) {
+      continue;
+    }
 
     const attributes = parseHtmlAttributes(match[4] || "");
     const context = [
       ...articleHints.slice(-2),
+      ...activeDivHints.slice(-2),
       ...figureHints.slice(-2),
       imageContextFromAttributes(attributes),
     ].filter(Boolean).join(" ");
@@ -1673,6 +1704,32 @@ function collectArticleImageCandidates(html: string): SourceImageCandidateHint[]
     collectImageElementCandidates(attributes, context, target);
   }
   return [...figureCandidates, ...articleCandidates];
+}
+
+/**
+ * Recognize only strong article-body signals on generic div containers.
+ * Broad names such as `content` alone are deliberately excluded because they
+ * commonly wrap navigation, recommendations, and advertising as well.
+ */
+function isLikelyArticleContentContainer(attributes: HtmlAttributes): boolean {
+  const role = attributes.role?.trim().toLowerCase();
+  if (role === "main") return true;
+
+  const itemPropTokens = (attributes.itemprop || "")
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (itemPropTokens.includes("articlebody")) return true;
+
+  const identifiers = [attributes.id, attributes.class]
+    .flatMap((value) => value ? value.toLowerCase().split(/\s+/) : [])
+    .map((value) => value.replace(/[_:]+/g, "-"))
+    .filter(Boolean);
+  return identifiers.some((identifier) =>
+    ARTICLE_CONTENT_CONTAINER_EXACT_NAMES.has(identifier)
+    || ARTICLE_CONTENT_CONTAINER_NAME_PATTERN.test(identifier)
+  );
 }
 
 function collectImageElementCandidates(
